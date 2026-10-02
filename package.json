@@ -1,6 +1,6 @@
 {
   "name": "anybots",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -13,7 +13,10 @@
     "check": "npm run typecheck && npm test && npm run build",
     "db:migrate": "tsx src/migrate.ts",
     "db:dev": "bash scripts/db-dev.sh",
-    "admin": "tsx src/admin.ts"
+    "admin": "tsx src/admin.ts",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "worker": "node dist/worker-main.js"
   },
   "dependencies": {
     "@modelcontextprotocol/fastify": "2.0.1",
