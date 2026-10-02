@@ -14,6 +14,15 @@ export async function notificationOptions(env: NodeJS.ProcessEnv = process.env):
   const ownHosts = env.ALLOWED_HOSTS?.split(',').map((host) => host.trim()) ?? [];
   if (hosts.some((host) => ownHosts.includes(host))) throw new Error('Webhook destinations must not target this service');
   const grokExperimental = env.GROK_EXPERIMENTAL === 'true';
+  let oauthResource: string | undefined;
+  if (grokExperimental) {
+    if (!env.OAUTH_ISSUER) throw new Error('Grok delivery requires OAUTH_ISSUER and a live OAuth connection');
+    const issuer = new URL(env.OAUTH_ISSUER);
+    if (issuer.protocol !== 'https:' || issuer.pathname !== '/' || issuer.search || issuer.hash || issuer.username || issuer.password) {
+      throw new Error('Grok delivery requires a public HTTPS OAuth origin');
+    }
+    oauthResource = `${issuer.origin}/mcp`;
+  }
   let groks: ProviderOptions['groks'];
   if (env.GROK_CONFIG_FILE) {
     if (!grokExperimental) throw new Error('GROK_EXPERIMENTAL must explicitly enable the unverified Grok adapter');
@@ -23,5 +32,5 @@ export async function notificationOptions(env: NodeJS.ProcessEnv = process.env):
     } catch { throw new Error('Grok configuration file is missing or invalid'); }
   }
   return { encryptionKey: Buffer.from(rawKey, 'hex'), transport: new PublicHttpsTransport(hosts), grokExperimental,
-    ...(groks ? { groks } : {}) };
+    ...(groks ? { groks } : {}), ...(oauthResource ? { oauthResource } : {}) };
 }

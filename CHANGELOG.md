@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+- Add a bounded OAuth pilot with exact callback registration, S256 PKCE, browser-only one-time pairing, short access tokens, rotating refresh tokens and revocation.
+- Bind MCP authorization and dots subscriptions to active OAuth authority, including revocation during callback verification.
+- Preserve the runtime and participant boundaries across OAuth connection and reconnect.
+- Verify browser consent, invalid-code recovery and cross-origin callback navigation with gstack Chromium; fix the Referrer-Policy/Origin interaction found by that check.
+- Add OAuth concurrency, replay, expiry and integration regressions; build the container in CI.
+
 ## 0.1.1
 
 - Expose authenticated MCP tools and dots Events using the official SDK.

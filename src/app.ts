@@ -1,7 +1,8 @@
 import { createMcpFastifyApp } from '@modelcontextprotocol/fastify';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpHandler, McpServer, ProtocolError, type CallToolResult, type ToolCallback } from '@modelcontextprotocol/server';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import { Relay, RelayError } from './relay.js';
 
@@ -13,14 +14,15 @@ const empty = z.strictObject({});
 
 export interface EventHooks {
   catalog(): Record<string, unknown>;
-  subscribe(bindingId: string, params: unknown): Promise<Record<string, unknown>>;
-  unsubscribe(bindingId: string, params: unknown): Promise<Record<string, unknown>>;
+  subscribe(bindingId: string, params: unknown, authorize?: (client: PoolClient) => Promise<{ oauthFamilyId?: string }>): Promise<Record<string, unknown>>;
+  unsubscribe(bindingId: string, params: unknown, authorize?: (client: PoolClient) => Promise<{ oauthFamilyId?: string }>): Promise<Record<string, unknown>>;
 }
 
 export interface AppOptions {
   allowedHosts?: string[];
   allowedOrigins?: string[];
   events?: EventHooks;
+  oauth?: { resourceMetadataUrl: string; register(app: FastifyInstance): void };
 }
 
 /** The transport does not mint identities: every operation resolves the bearer through Relay. */
@@ -33,6 +35,9 @@ export function buildApp(relay: Relay, options: AppOptions = {}) {
     allowedOrigins: options.allowedOrigins ?? allowedHosts,
   });
   const credentials = new WeakMap<FastifyRequest, string>();
+  const challenge = options.oauth
+    ? `Bearer resource_metadata="${options.oauth.resourceMetadataUrl}", scope="relay"`
+    : 'Bearer realm="anybots-pilot"';
 
   // Fastify logging is disabled. Never echo errors that could include database or token data.
   app.setErrorHandler((error, _request, reply) => {
@@ -47,14 +52,14 @@ export function buildApp(relay: Relay, options: AppOptions = {}) {
     const authorization = request.headers.authorization;
     const match = authorization?.match(/^Bearer ([^\s]+)$/i);
     if (!match?.[1]) {
-      return reply.header('WWW-Authenticate', 'Bearer realm="anybots-pilot"').code(401).send({ error: 'unauthorized' });
+      return reply.header('WWW-Authenticate', challenge).code(401).send({ error: 'unauthorized' });
     }
     try {
       await relay.authenticate(match[1]);
       credentials.set(request, match[1]);
     } catch (error) {
       if (!(error instanceof RelayError)) return reply.code(503).send({ error: 'authentication_unavailable' });
-      return reply.header('WWW-Authenticate', 'Bearer realm="anybots-pilot"').code(401).send({ error: 'unauthorized' });
+      return reply.header('WWW-Authenticate', challenge).code(401).send({ error: 'unauthorized' });
     }
   });
 
@@ -71,11 +76,12 @@ export function buildApp(relay: Relay, options: AppOptions = {}) {
       return toNodeHandler(handler)(raw, reply.raw, request.body);
     },
   });
+  options.oauth?.register(app);
   return app;
 }
 
 function createRelayServer(relay: Relay, token: string, events?: EventHooks) {
-  const server = new McpServer({ name: 'anybots', version: '0.1.1' });
+  const server = new McpServer({ name: 'anybots', version: '0.1.2' });
   const register = <T extends z.ZodObject>(
     name: string, description: string, inputSchema: T, action: (input: z.output<T>) => Promise<unknown>, readOnlyHint = false,
   ) => {
@@ -142,8 +148,8 @@ function createRelayServer(relay: Relay, token: string, events?: EventHooks) {
           const binding = await relay.authenticate(token);
           if (method === 'events/list') return events.catalog();
           return method === 'events/subscribe'
-            ? await events.subscribe(binding.id, params)
-            : await events.unsubscribe(binding.id, params);
+            ? await events.subscribe(binding.id, params, (client) => relay.revalidate(client, token, binding.id))
+            : await events.unsubscribe(binding.id, params, (client) => relay.revalidate(client, token, binding.id));
         } catch (error) {
           if (typeof error === 'object' && error !== null && 'code' in error && 'reason' in error
             && typeof error.code === 'number' && typeof error.reason === 'string') {

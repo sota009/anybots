@@ -4,6 +4,9 @@ import { pathToFileURL } from 'node:url';
 import pg from 'pg';
 import { z } from 'zod';
 import { Relay } from './relay.js';
+import { randomUUID } from 'node:crypto';
+import { oauthFromEnvironment } from './oauth-config.js';
+import type { OAuthPilot } from './oauth.js';
 
 const provision = z.strictObject({
   action: z.literal('provision'), ownerId: z.string().min(1).max(200),
@@ -14,10 +17,19 @@ const pair = z.strictObject({
   consentConfirmed: z.literal(true),
 });
 const disable = z.strictObject({ action: z.literal('disable'), bindingId: z.uuid() });
+const connect = z.strictObject({ action: z.literal('connect'), bindingId: z.uuid() });
 
 /** Operator-only: read input from stdin; credentials never go to stdout or an AI tool. */
-export async function admin(relay: Relay, input: unknown, credentialsDirectory = '.local') {
-  const command = z.union([provision, pair, disable]).parse(input);
+export async function admin(relay: Relay, input: unknown, credentialsDirectory = '.local', oauth?: OAuthPilot) {
+  const command = z.union([provision, pair, disable, connect]).parse(input);
+  if (command.action === 'connect') {
+    if (!oauth) throw new Error('OAuth configuration required');
+    await mkdir(credentialsDirectory, { recursive: true, mode: 0o700 });
+    const pairing = await oauth.issuePairingCode(command.bindingId);
+    const file = resolve(credentialsDirectory, `${command.bindingId}-connect-${randomUUID()}.json`);
+    await writeFile(file, JSON.stringify({ ...pairing, bindingId: command.bindingId, issuer: oauth.issuer }) + '\n', { flag: 'wx', mode: 0o600 });
+    return { bindingId: command.bindingId, credentialsFile: file, expiresAt: pairing.expiresAt };
+  }
   if (command.action === 'provision') {
     await mkdir(credentialsDirectory, { recursive: true, mode: 0o700 });
     const result = await relay.provisionBinding({ ownerId: command.ownerId, runtimeScope: command.runtimeScope, provider: command.provider });
@@ -48,7 +60,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       raw += String(chunk);
       if (raw.length > 16_384) throw new Error('Input too large');
     }
-    console.log(JSON.stringify(await admin(new Relay(pool), JSON.parse(raw))));
+    console.log(JSON.stringify(await admin(new Relay(pool), JSON.parse(raw), '.local', oauthFromEnvironment(pool))));
   } catch {
     console.error('Admin operation failed. Check configuration, input, and current binding state.');
     process.exitCode = 1;
