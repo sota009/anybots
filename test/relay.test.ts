@@ -21,6 +21,8 @@ describe('Postgres relay invariants', () => {
     const read = await relay.conversationRead(a.token, { conversationId: results[0]!.conversationId });
     expect(read.messages).toHaveLength(1);
     expect(read.outbox).toHaveLength(1);
+    expect(read.outbox[0]!.lastError).toBeNull();
+    expect(read.outbox[0]!.updatedAt).toBeInstanceOf(Date);
     await expect(relay.conversationOpen(a.token, { recipientBindingId: b.bindingId, text: 'Different', expectsReply: true, idempotencyKey: 'open-1' })).rejects.toMatchObject({ code: 'idempotency_conflict' });
   });
   it('serializes claims per runtime and stores one reply for concurrent finishes', async () => {
@@ -170,6 +172,25 @@ describe('Postgres relay invariants', () => {
     const read = await relay.conversationRead(a.token, { conversationId: c.conversationId });
     expect(read.messages.map(m => m.sequence)).toEqual([1, 2]);
     expect(read.turns[0]!.status).toBe('finished');
+  });
+
+  it('keeps a stopped external turn uncertain and blocks another claim after rebinding', async () => {
+    const c = await open();
+    const turn = await relay.inboxClaim(b.token);
+    await relay.conversationClose(a.token, { conversationId: c.conversationId });
+    const read = await relay.conversationRead(a.token, { conversationId: c.conversationId });
+    expect(read.turns[0]!.status).toBe('uncertain');
+    await expect(relay.turnFinish(b.token, { turnId: turn!.turnId, result: 'no_reply', idempotencyKey: 'stopped' })).rejects.toMatchObject({ code: 'conversation_stopped' });
+    const next = await open();
+    expect(await relay.inboxClaim(b.token, { conversationId: next.conversationId })).toBeNull();
+    await expect(relay.conversationOpen(b.token, { recipientBindingId: a.bindingId, text: 'bypass', expectsReply: true, idempotencyKey: 'stopped-bypass' })).rejects.toMatchObject({ code: 'runtime_busy' });
+    const original = await relay.authenticate(b.token);
+    await relay.disableBinding(b.bindingId);
+    const replacement = await relay.provisionBinding({ ownerId: original.ownerId, runtimeScope: original.runtimeScope, provider: 'grok' });
+    await relay.grantPair(a.bindingId, replacement.bindingId);
+    const newer = await relay.conversationOpen(a.token, { recipientBindingId: replacement.bindingId, text: 'new binding', expectsReply: true, idempotencyKey: 'replacement' });
+    expect(await relay.inboxClaim(replacement.token, { conversationId: newer.conversationId })).toBeNull();
+    await expect(relay.conversationOpen(replacement.token, { recipientBindingId: a.bindingId, text: 'replacement bypass', expectsReply: true, idempotencyKey: 'replacement-bypass' })).rejects.toMatchObject({ code: 'runtime_busy' });
   });
 
 });

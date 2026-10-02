@@ -157,7 +157,7 @@ export class Relay {
       const c = await this.conversation(client, me, data.conversationId);
       const messages = await client.query<Message>(`SELECT ${messageColumns} FROM messages WHERE conversation_id=$1 AND sequence>$2 ORDER BY sequence LIMIT $3`, [c.id, data.afterSequence, data.limit]);
       const turns = await client.query<{ id: string; status: string; leaseExpiresAt: Date; result: string | null }>('SELECT id,status,lease_expires_at AS "leaseExpiresAt",result FROM turns WHERE conversation_id=$1 ORDER BY created_at LIMIT 12', [c.id]);
-      const outbox = await client.query<{ id: string; messageId: string; status: string; attempts: number }>('SELECT id,message_id AS "messageId",status,attempts FROM outbox WHERE conversation_id=$1 ORDER BY created_at LIMIT 13', [c.id]);
+      const outbox = await client.query<{ id: string; messageId: string; status: string; attempts: number; lastError: string | null; updatedAt: Date }>('SELECT id,message_id AS "messageId",status,attempts,last_error AS "lastError",updated_at AS "updatedAt" FROM outbox WHERE conversation_id=$1 ORDER BY created_at LIMIT 13', [c.id]);
       return { conversationId: c.id, status: c.status, epoch: c.epoch, expiresAt: c.expires_at, messages: messages.rows, turns: turns.rows, outbox: outbox.rows };
     });
   }
@@ -192,7 +192,7 @@ export class Relay {
       const c = await this.conversation(client, me, turn.conversation_id);
       const prior = await this.prior<FinishResult>(client, me.id, 'finish', data.idempotencyKey, data);
       if (prior) return prior;
-      if (turn.status === 'uncertain') throw new RelayError('lease_expired');
+      if (turn.status === 'uncertain' && c.status === 'uncertain') throw new RelayError('lease_expired');
       if (c.status !== 'open' || turn.epoch !== c.epoch) throw new RelayError('conversation_stopped');
       if (turn.status !== 'active') throw new RelayError('turn_finished');
       const message = await client.query<Message>(`SELECT ${messageColumns} FROM messages WHERE id=$1`, [turn.input_message_id]);
@@ -211,7 +211,9 @@ export class Relay {
 
   private async stop(client: PoolClient, id: string, status: 'closed' | 'expired' | 'limited' | 'uncertain') {
     await client.query("UPDATE conversations SET status=$2,epoch=epoch+1 WHERE id=$1 AND status='open'", [id, status]);
-    await client.query("UPDATE turns SET status='cancelled' WHERE conversation_id=$1 AND status='active'", [id]);
+    // Stopping delivery cannot prove that the remote tool execution stopped.
+    // Preserve runtime exclusion until an operator reconciles the external work.
+    await client.query("UPDATE turns SET status='uncertain' WHERE conversation_id=$1 AND status='active'", [id]);
     await client.query("UPDATE outbox SET status='cancelled',updated_at=now() WHERE conversation_id=$1 AND status='pending'", [id]);
   }
   async conversationClose(token: string, input: { conversationId: string }) {
