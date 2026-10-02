@@ -5,7 +5,7 @@ import { lockRelay, withTransaction } from './db.js';
 import { RelayError } from './errors.js';
 export { RelayError } from './errors.js';
 
-export type Binding = { id: string; ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' };
+export type Binding = { id: string; ownerId: string; runtimeScope: string; provider: 'dots' | 'grok'; oauthFamilyId?: string };
 type Conversation = { id: string; binding_a: string; binding_b: string; status: string; epoch: number; expires_at: Date; turn_count: number };
 export type Message = { id: string; sequence: number; text: string; expectsReply: boolean; senderBindingId: string; recipientBindingId: string; replyTo: string | null };
 const bindingColumns = 'id, owner_id AS "ownerId", runtime_scope AS "runtimeScope", provider';
@@ -28,7 +28,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 export class Relay {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly options: { oauthResource?: string } = {}) {}
 
   // Expiry persists even when the triggering request is rejected. The savepoint
   // prevents a rejected command from committing any partial operation writes.
@@ -58,10 +58,26 @@ export class Relay {
   private async auth(client: PoolClient, token: string): Promise<Binding> {
     if (typeof token !== 'string' || token.length < 32 || token.length > 512) throw new RelayError('unauthorized', 'Invalid credential', 401);
     const result = await client.query<Binding>(`SELECT ${bindingColumns} FROM bindings WHERE token_hash=$1 AND active`, [hash(token)]);
-    if (!result.rows[0]) throw new RelayError('unauthorized', 'Invalid credential', 401);
-    return result.rows[0];
+    if (result.rows[0]) return result.rows[0];
+    if (this.options.oauthResource) {
+      const access = await client.query<Binding>(`SELECT b.id,b.owner_id AS "ownerId",b.runtime_scope AS "runtimeScope",b.provider,f.id AS "oauthFamilyId"
+        FROM oauth_tokens t JOIN oauth_families f ON f.id=t.family_id JOIN bindings b ON b.id=f.binding_id
+        WHERE t.hash=$1 AND t.kind='access' AND NOT t.consumed AND t.expires_at>clock_timestamp()
+        AND NOT f.revoked AND f.expires_at>clock_timestamp() AND f.resource=$2 AND f.scope='relay' AND b.active`,
+      [hash(token), this.options.oauthResource]);
+      if (access.rows[0]) return access.rows[0];
+    }
+    throw new RelayError('unauthorized', 'Invalid credential', 401);
   }
   authenticate(token: string) { return this.run(client => this.auth(client, token)); }
+
+  /** Revalidate authority on a caller's existing transaction, never a second pool slot. */
+  async revalidate(client: PoolClient, token: string, expectedBindingId: string): Promise<{ oauthFamilyId?: string }> {
+    await lockRelay(client);
+    const binding = await this.auth(client, token);
+    if (binding.id !== expectedBindingId) throw new RelayError('unauthorized', 'Invalid credential', 401);
+    return binding.oauthFamilyId ? { oauthFamilyId: binding.oauthFamilyId } : {};
+  }
 
   async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: 'dots' | 'grok'; token?: string }) {
     const data = parse(z.object({ ownerId: z.string().min(1).max(256), runtimeScope: z.string().min(1).max(256), provider: z.enum(['dots', 'grok']), token: z.string().min(32).max(512).optional() }).strict(), input);

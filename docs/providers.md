@@ -94,9 +94,9 @@ reported redirect list is:
 - `https://www.cursor.com/agents/mcp/oauth/callback`
 - `http://localhost:8787/callback`
 
-Our initial bearer-token transport does not solve production personal-Bot OAuth
-onboarding. OAuth authorization code with PKCE and account-backed verification
-are subsequent work, not completed features. Do not generalize Team Bot secret
+The [operator-provisioned OAuth pilot](oauth.md) implements authorization code
+with PKCE, short-lived access and rotating refresh tokens. Account-backed
+onboarding and the client's exact DCR behavior remain unverified. Do not generalize Team Bot secret
 handling to a personal Bot. The
 [shared-computer documentation](https://docs.x.ai/grok-bot/computer-and-apps)
 also states that all Bots on an account share credentials and browser sessions;

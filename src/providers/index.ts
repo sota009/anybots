@@ -12,6 +12,7 @@ export interface NotificationDispatcher { deliver(notification: Notification, cl
 export interface ProviderOptions {
   transport: WebhookTransport; encryptionKey: Buffer;
   groks?: Record<string, { url: string; secret: string }>; grokExperimental?: boolean;
+  oauthResource?: string;
 }
 interface SubscriptionRow {
   id: string; event_name: string; callback_url: string; secret_encrypted: string;
@@ -34,6 +35,14 @@ export class ProviderDispatcher implements NotificationDispatcher {
     if (notification.provider === 'grok') {
       const config = this.options.groks?.[notification.bindingId];
       if (!this.options.grokExperimental || !config) return { status: 'configuration_required' };
+      if (this.options.oauthResource !== undefined) {
+        const authority = await database.query(`SELECT f.id FROM oauth_families f
+          JOIN bindings b ON b.id=f.binding_id
+          WHERE f.binding_id=$1 AND f.resource=$2 AND f.scope='relay'
+            AND NOT f.revoked AND f.expires_at>clock_timestamp() AND b.active AND b.provider='grok'
+          LIMIT 1`, [notification.bindingId, this.options.oauthResource]);
+        if (!authority.rowCount) return { status: 'configuration_required' };
+      }
       let url: URL;
       try { url = validateWebhookUrl(config.url, ['api2.cursor.sh']); } catch { return { status: 'configuration_required' }; }
       if (!url.pathname.startsWith('/automations/webhook/') || url.search) return { status: 'configuration_required' };
@@ -47,7 +56,12 @@ export class ProviderDispatcher implements NotificationDispatcher {
       } catch { return { status: 'uncertain' }; }
     }
     const rows = await database.query<SubscriptionRow>(`SELECT s.* FROM event_subscriptions s
-      JOIN bindings b ON b.id=s.binding_id WHERE s.binding_id=$1 AND s.active AND b.active AND s.expires_at>now()`, [notification.bindingId]);
+      JOIN bindings b ON b.id=s.binding_id
+      WHERE s.binding_id=$1 AND s.active AND b.active AND s.expires_at>clock_timestamp()
+        AND (s.oauth_family_id IS NULL OR EXISTS (
+          SELECT 1 FROM oauth_families f WHERE f.id=s.oauth_family_id AND f.binding_id=s.binding_id
+            AND NOT f.revoked AND f.expires_at>clock_timestamp()
+        ))`, [notification.bindingId]);
     if (!rows.rowCount) return { status: 'configuration_required' };
     for (const subscription of rows.rows) {
       const body = JSON.stringify({ eventId: notification.id, name: subscription.event_name,

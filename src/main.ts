@@ -3,6 +3,7 @@ import { buildApp } from './app.js';
 import { Relay } from './relay.js';
 import { EventSubscriptions } from './events.js';
 import { notificationOptions } from './config.js';
+import { oauthFromEnvironment } from './oauth-config.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL is required');
@@ -13,9 +14,11 @@ if (host !== '127.0.0.1' && host !== '::1' && !allowedHosts?.length) {
 }
 const pool = new pg.Pool({ connectionString: databaseUrl });
 const notifications = process.env.NOTIFICATIONS_ENABLED === 'true' ? await notificationOptions() : undefined;
-const app = buildApp(new Relay(pool), {
+const oauth = oauthFromEnvironment(pool);
+const app = buildApp(new Relay(pool, oauth ? { oauthResource: oauth.resource } : {}), {
   ...(allowedHosts ? { allowedHosts } : {}),
   ...(notifications ? { events: new EventSubscriptions(pool, notifications) } : {}),
+  ...(oauth ? { oauth } : {}),
 });
 app.addHook('onClose', () => pool.end());
 const shutdown = () => { void app.close().catch(() => { process.exitCode = 1; }); };

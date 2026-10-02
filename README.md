@@ -20,7 +20,7 @@ Tests create isolated schemas and remove only their own schemas. Set `TEST_DATAB
 
 ## Operator provisioning
 
-The initial relay uses operator-provisioned, consented connections. This is a development path, not completed product onboarding. Personal Grok OAuth onboarding remains a separate gate.
+The initial relay uses operator-provisioned, consented connections. This is a development path, not completed product onboarding. The [OAuth pilot](docs/oauth.md) provides a one-time browser pairing flow; real personal Grok and dots onboarding remains to be verified.
 
 ```sh
 echo '{"action":"provision","ownerId":"owner-a","runtimeScope":"dots-owner-a","provider":"dots"}' | npm run admin
@@ -54,7 +54,7 @@ The API exposes `/health` and authenticated `/mcp`. Supported tools are `agents_
 
 Notification dispatch is disabled by default. To enable it, set `NOTIFICATIONS_ENABLED=true`, supply a 32-byte hex `NOTIFICATION_ENCRYPTION_KEY` through a secret manager, and set `WEBHOOK_ALLOWED_HOSTS` to the exact verified callback hostnames. Preserve the encryption key across restarts. The API uses these settings to expose dots Events; the worker uses the same settings for delivery. Public binding also requires `ALLOWED_HOSTS`. Put the service behind HTTPS before connecting any real accounts.
 
-Grok additionally requires explicit `GROK_EXPERIMENTAL=true` and a private `GROK_CONFIG_FILE`. Its shape maps a provisioned Grok binding UUID to `{"url":"<UI-issued webhook URL>","secret":"<UI-issued key>"}`. Keep this file out of Git and do not place it in chat. This experimental request envelope has not been validated with a real Bot. See [provider evidence](docs/providers.md) for exact evidence and onboarding limits.
+Grok additionally requires explicit `GROK_EXPERIMENTAL=true`, `OAUTH_ISSUER`, a live OAuth connection for the recipient, and a private `GROK_CONFIG_FILE`. Its shape maps a provisioned Grok binding UUID to `{"url":"<UI-issued webhook URL>","secret":"<UI-issued key>"}`. Keep this file out of Git and do not place it in chat. This experimental request envelope has not been validated with a real Bot. See [provider evidence](docs/providers.md) for exact evidence and onboarding limits.
 
 The worker persists an `uncertain` attempt before issuing HTTP while holding the same database ordering lock as stop/revoke. Crashes and network ambiguity remain uncertain without automatic replay. Explicit transient HTTP responses retry at most three times, honoring Retry-After; owner and binding dispatch budgets are 60 attempts/hour. One live dots subscription per binding prevents two contexts from sharing the same inbox. HTTP receipt does not prove agent consumption.
 
@@ -71,4 +71,4 @@ docker run --rm --env-file /private/path/anybots.env -p 127.0.0.1:3000:3000 anyb
 docker run --rm --env-file /private/path/anybots.env anybots:local node dist/worker-main.js
 ```
 
-This repository supplies a container, not a deployed service. Choose hosting and configure real owners' integrations before recording account-backed success.
+This repository supplies a container, not a deployed service. Configure [OAuth](docs/oauth.md), choose hosting, and connect real owners' integrations before recording account-backed success.

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { lockRelay, withTransaction } from './db.js';
 import { decryptSecret, encryptSecret, signingKey, webhookHeaders } from './providers/crypto.js';
@@ -33,6 +33,7 @@ export function subscriptionId(bindingId: string, name: string, url: string, arg
 }
 
 export interface EventOptions { transport: WebhookTransport; encryptionKey: Buffer; defaultTtlMs?: number }
+export type EventAuthorization = (client: PoolClient) => Promise<{ oauthFamilyId?: string }>;
 
 export class EventSubscriptions {
   private readonly verified = new Map<string, number>();
@@ -46,7 +47,7 @@ export class EventSubscriptions {
         required: ['conversationId', 'messageId'], additionalProperties: false } }] };
   }
 
-  async subscribe(bindingId: string, input: unknown) {
+  async subscribe(bindingId: string, input: unknown, authorize?: EventAuthorization) {
     const parsed = subscribeSchema.safeParse(input);
     if (!parsed.success) throw new EventError(-32602, 'invalid_subscription');
     const params = parsed.data;
@@ -59,9 +60,18 @@ export class EventSubscriptions {
     const ttlMs = Math.min(params.ttlMs ?? this.options.defaultTtlMs ?? 3_600_000, 86_400_000);
     return withTransaction(this.pool, async client => {
       await lockRelay(client);
+      // Callback verification awaits external HTTP. Revalidate the original caller
+      // under the same ordering barrier used by revocation before committing.
+      const authority = authorize ? await authorize(client) : {};
       const binding = await client.query('SELECT id FROM bindings WHERE id=$1 AND active=true AND provider=\'dots\' FOR UPDATE', [bindingId]);
       if (!binding.rowCount) throw new EventError(-32001, 'binding_unavailable');
-      await client.query('UPDATE event_subscriptions SET active=false WHERE binding_id=$1 AND active AND expires_at<=now()', [bindingId]);
+      await client.query(`UPDATE event_subscriptions s SET active=false,updated_at=now()
+        WHERE binding_id=$1 AND active AND (
+          expires_at<=clock_timestamp() OR (oauth_family_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM oauth_families f WHERE f.id=s.oauth_family_id
+              AND (f.revoked OR f.expires_at<=clock_timestamp())
+          ))
+        )`, [bindingId]);
       const other = await client.query('SELECT id FROM event_subscriptions WHERE binding_id=$1 AND active AND id<>$2', [bindingId, id]);
       if (other.rowCount) throw new EventError(-32602, 'subscription_context_already_bound');
       const existing = await client.query<{ secret_encrypted: string; previous_secret_encrypted: string | null; rotation_until: Date | null }>('SELECT secret_encrypted,previous_secret_encrypted,rotation_until FROM event_subscriptions WHERE id=$1', [id]);
@@ -69,14 +79,14 @@ export class EventSubscriptions {
       const rotated = previous && decryptSecret(previous, this.options.encryptionKey, id) !== params.delivery.secret;
       const expiration = new Date(Date.now() + ttlMs);
       await client.query(`INSERT INTO event_subscriptions
-        (id,binding_id,event_name,arguments,callback_url,secret_encrypted,previous_secret_encrypted,rotation_until,expires_at)
-        VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9)
+        (id,binding_id,event_name,arguments,callback_url,secret_encrypted,previous_secret_encrypted,rotation_until,expires_at,oauth_family_id)
+        VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10)
         ON CONFLICT (id) DO UPDATE SET secret_encrypted=EXCLUDED.secret_encrypted,
           previous_secret_encrypted=EXCLUDED.previous_secret_encrypted,rotation_until=EXCLUDED.rotation_until,
-          expires_at=EXCLUDED.expires_at,active=true,updated_at=now()`,
+          expires_at=EXCLUDED.expires_at,oauth_family_id=EXCLUDED.oauth_family_id,active=true,updated_at=now()`,
       [id, bindingId, params.name, JSON.stringify(params.arguments), params.delivery.url,
         encryptSecret(params.delivery.secret, this.options.encryptionKey, id), rotated ? previous : existing.rows[0]?.previous_secret_encrypted ?? null,
-        rotated ? new Date(Date.now() + 300_000) : existing.rows[0]?.rotation_until ?? null, expiration]);
+        rotated ? new Date(Date.now() + 300_000) : existing.rows[0]?.rotation_until ?? null, expiration, authority.oauthFamilyId ?? null]);
       return { id, refreshBefore: expiration.toISOString(), cursor: null, truncated: false };
     });
   }
@@ -103,13 +113,14 @@ export class EventSubscriptions {
     this.verified.set(cacheKey, Date.now() + 60_000);
   }
 
-  async unsubscribe(bindingId: string, input: unknown): Promise<Record<string, never>> {
+  async unsubscribe(bindingId: string, input: unknown, authorize?: EventAuthorization): Promise<Record<string, never>> {
     const parsed = identitySchema.safeParse(input);
     if (!parsed.success) throw new EventError(-32602, 'invalid_subscription');
     const p = parsed.data;
     const id = subscriptionId(bindingId, p.name, p.delivery.url, p.arguments);
     return withTransaction(this.pool, async client => {
       await lockRelay(client);
+      if (authorize) await authorize(client);
       const binding = await client.query('SELECT id FROM bindings WHERE id=$1 AND active=true', [bindingId]);
       if (!binding.rowCount) throw new EventError(-32001, 'binding_unavailable');
       await client.query('UPDATE event_subscriptions SET active=false,updated_at=now() WHERE id=$1 AND binding_id=$2', [id, bindingId]);
