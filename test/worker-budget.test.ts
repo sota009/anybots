@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { Relay } from '../src/relay.js';
 import { dispatchOne, notificationBudgetWindows } from '../src/worker.js';
 import { testDatabase } from './helpers.js';
+import { notificationBudgetOptions } from '../src/notification-budget.js';
 
 describe('global persistent notification budgets', () => {
   let db: Awaited<ReturnType<typeof testDatabase>>; let relay: Relay;
@@ -32,6 +33,49 @@ describe('global persistent notification budgets', () => {
   const accepted = () => vi.fn(async () => ({ status: 'accepted' as const }));
   const state = async (id: string) => (await db.pool.query('SELECT status,last_error,attempts FROM outbox WHERE id=$1', [id])).rows[0];
   const attemptCount = async () => Number((await db.pool.query('SELECT count(*) FROM delivery_attempts')).rows[0].count);
+
+  it('applies the configured daily cap across concurrent workers and retains exhausted notifications after an increase', async () => {
+    const limits = notificationBudgetOptions({ NOTIFICATION_DAILY_LIMIT: '200', NOTIFICATION_MONTHLY_LIMIT: '2000' });
+    await history(199);
+    const other = await newPair();
+    const deliver = accepted();
+    const restartedPool = new pg.Pool({ ...db.pool.options, max: 1 });
+    try {
+      await Promise.all([dispatchOne(db.pool, { deliver }, limits), dispatchOne(restartedPool, { deliver }, limits)]);
+      expect(deliver).toHaveBeenCalledTimes(1);
+      expect(await attemptCount()).toBe(200);
+      const states = [await state(pair.outboxId), await state(other.outboxId)];
+      expect(states.map(row => row.status).sort()).toEqual(['accepted', 'failed']);
+      expect(states.find(row => row.status === 'failed')).toMatchObject({ last_error: 'budget_exceeded', attempts: 0 });
+      expect(await dispatchOne(restartedPool, { deliver }, { daily: 201, monthly: 2000 })).toBe(false);
+      await newPair();
+      await dispatchOne(restartedPool, { deliver }, { daily: 201, monthly: 2000 });
+      expect(await attemptCount()).toBe(201);
+      expect(deliver).toHaveBeenCalledTimes(2);
+    } finally { await restartedPool.end(); }
+  });
+
+  it('enforces the configured monthly cap before sending', async () => {
+    const limits = notificationBudgetOptions({ NOTIFICATION_DAILY_LIMIT: '3000', NOTIFICATION_MONTHLY_LIMIT: '2000' });
+    await history(1999);
+    const deliver = accepted();
+    await dispatchOne(db.pool, { deliver }, limits);
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(await attemptCount()).toBe(2000);
+    const next = await newPair();
+    await dispatchOne(db.pool, { deliver }, limits);
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(await state(next.outboxId)).toMatchObject({ status: 'failed', last_error: 'budget_exceeded', attempts: 0 });
+  });
+
+  it('rejects invalid dispatch limits before database access or external sends', async () => {
+    const deliver = accepted();
+    for (const daily of [0, -1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(dispatchOne({} as pg.Pool, { deliver }, { daily, monthly: 100 })).rejects.toThrow('Invalid notification budget');
+      await expect(dispatchOne({} as pg.Pool, { deliver }, { daily: 20, monthly: daily })).rejects.toThrow('Invalid notification budget');
+    }
+    expect(deliver).not.toHaveBeenCalled();
+  });
 
   it('reserves the twentieth daily attempt before HTTP and permanently rejects the next notification', async () => {
     await history(19);
