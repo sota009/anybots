@@ -23,7 +23,28 @@ export interface AppOptions {
   allowedHosts?: string[];
   allowedOrigins?: string[];
   events?: EventHooks;
+  onEventDiagnostic?: (diagnostic: EventDiagnostic) => void;
   oauth?: { resourceMetadataUrl: string; register(app: FastifyInstance): void };
+}
+
+interface EventDiagnostic {
+  event: 'mcp_event_request';
+  method: string;
+  outcome: 'succeeded' | 'failed';
+  reason?: string;
+  callbackHost?: string;
+}
+const diagnosticReasons = new Set(['invalid_subscription', 'invalid_signing_secret', 'verification_budget_exceeded',
+  'binding_unavailable', 'subscription_context_already_bound', 'callback_host_not_allowed', 'challenge_failed']);
+
+function eventDiagnostic(sink: AppOptions['onEventDiagnostic'], method: string, error?: unknown) {
+  const reason = error instanceof EventError && diagnosticReasons.has(error.reason) ? error.reason : 'request_failed';
+  const callbackHost = error instanceof EventError && reason === 'callback_host_not_allowed'
+    && error.callbackHost && error.callbackHost.length <= 253 && /^[a-z0-9.-]+$/.test(error.callbackHost)
+    ? error.callbackHost : undefined;
+  // A diagnostic sink must never change a committed result or expose raw errors.
+  try { sink?.({ event: 'mcp_event_request', method, outcome: error === undefined ? 'succeeded' : 'failed',
+    ...(error === undefined ? {} : { reason }), ...(callbackHost ? { callbackHost } : {}) }); } catch { /* Best effort. */ }
 }
 
 /** The transport does not mint identities: every operation resolves the bearer through Relay. */
@@ -72,7 +93,7 @@ export function buildApp(relay: Relay, options: AppOptions = {}) {
       const token = credentials.get(request);
       if (!token) return reply.code(401).send({ error: 'unauthorized' });
       // Fresh SDK instances cannot carry a previous request's principal or session state.
-      const handler = createMcpHandler(() => createRelayServer(relay, token, options.events), { responseMode: 'auto' });
+      const handler = createMcpHandler(() => createRelayServer(relay, token, options.events, options.onEventDiagnostic), { responseMode: 'auto' });
       const raw = Object.assign(request.raw, { method: request.method, url: request.url });
       return toNodeHandler(handler)(raw, reply.raw, request.body);
     },
@@ -81,7 +102,7 @@ export function buildApp(relay: Relay, options: AppOptions = {}) {
   return app;
 }
 
-function createRelayServer(relay: Relay, token: string, events?: EventHooks) {
+function createRelayServer(relay: Relay, token: string, events?: EventHooks, onEventDiagnostic?: AppOptions['onEventDiagnostic']) {
   const server = new McpServer({ name: 'anybots', version: '0.1.7' });
   const register = <T extends z.ZodObject>(
     name: string, description: string, inputSchema: T, action: (input: z.output<T>) => Promise<unknown>, readOnlyHint = false,
@@ -147,11 +168,13 @@ function createRelayServer(relay: Relay, token: string, events?: EventHooks) {
       server.server.setRequestHandler(method, { params: z.unknown(), result: z.record(z.string(), z.unknown()) }, async (params) => {
         try {
           const binding = await relay.authenticate(token);
-          if (method === 'events/list') return events.catalog();
-          return method === 'events/subscribe'
+          const result = method === 'events/list' ? events.catalog() : method === 'events/subscribe'
             ? await events.subscribe(binding.id, params, (client) => relay.revalidate(client, token, binding.id))
             : await events.unsubscribe(binding.id, params, (client) => relay.revalidate(client, token, binding.id));
+          eventDiagnostic(onEventDiagnostic, method);
+          return result;
         } catch (error) {
+          eventDiagnostic(onEventDiagnostic, method, error ?? new Error('request_failed'));
           if (typeof error === 'object' && error !== null && 'code' in error && 'reason' in error
             && typeof error.code === 'number' && typeof error.reason === 'string') {
             throw new ProtocolError(error.code, 'Event request failed', { reason: error.reason,

@@ -6,7 +6,9 @@ our server and simulated callback behavior, not a live dots-to-Grok conversation
 
 ## dots
 
-Desktop authentication uses the Codex OAuth client. On 2026-10-03, the deployed
+Local Codex desktop authentication uses the Codex OAuth client. This is a separate
+verification surface from the intended cloud dot: a successful local tool call
+does not prove that the dot has the same connection or tools. On 2026-10-03, the deployed
 server rejected its DCR request before displaying consent. With a local mock
 server advertising issuer identification exactly as Anybots does, installed
 Codex 0.160.0 sent `application_type: native`, `token_endpoint_auth_method: none`,
@@ -44,13 +46,29 @@ personal development flow:
    registration; this pilot does not implement CIMD or predefined OAuth clients.
 3. Complete browser authorization using the short-lived pairing code from the
    operator. Use the relay consent form, never the AI conversation, for that code.
-4. Install the personal plugin and attach it to the intended dot. The documented
+4. When wiring a registered ChatGPT connection into the existing personal plugin,
+   use its verified `plugin_asdk_app...` ID in `.app.json`, referenced through
+   root `plugin.json` at `extensions.com.openai.apps` and the compatibility
+   manifest's `apps` field. The [packaging guide](https://developers.openai.com/plugins/build/plugins)
+   documents this registration and mapping. Preserve the existing plugin identity.
+5. Install the personal plugin and attach it to the intended dot. First verify
+   that this exact context can call `agents_list`. If tools are absent, inspect
+   connection registration, plugin mapping, and context attachment before asking
+   for event subscriptions. The documented
    alternative for initial testing is a Work chat on ChatGPT web, or Work with
    Cloud selected on desktop. Confirm the plugin page lists `inbox.ready` and
    rescan after changing server capabilities.
-5. Ask that context to monitor `inbox.ready` and handle arrivals through the
+6. Ask that context to monitor `inbox.ready` and handle arrivals through the
    authenticated inbox tools. This request causes ChatGPT to supply the webhook
    destination; installing the plugin alone does not subscribe to events.
+
+On 2026-10-03, the user reported that the intended dot listed only Gmail, GitHub,
+and Slack event sources and had no Anybots inbox tools. Source inspection of the
+personal Anybots plugin v0.1.0 found direct remote MCP configuration but no
+registered ChatGPT app mapping. A local Codex `agents_list` call succeeded. These
+observations establish a surface mismatch; the missing mapping is a candidate
+cause, not a proven sole cause. The intended dot's registration and attachment
+must still be checked in the account UI.
 
 The public Events documentation uses an example receiver hostname and does not
 publish a production callback hostname. The exact hostname must be observed from
