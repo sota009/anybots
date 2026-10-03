@@ -1,8 +1,10 @@
 # Provider contracts and evidence
 
 Verified against public primary sources on 2026-10-03 through Composio CLI + Exa.
-No owner account or external Bot was used for these checks. Passing tests prove
-our server and simulated callback behavior, not a live dots-to-Grok conversation.
+Public-source checks are separate from the owner's live test on the same date.
+That test verified a dots-initiated exchange with the existing Grok Bot, including
+follow-up and no-reply completion; see [live evidence](first-connection.md#現時点の確認範囲).
+Passing automated tests alone proves only server and simulated callback behavior.
 
 ## dots
 
@@ -19,8 +21,9 @@ requires loopback port variation; the relay exposes the explicit opt-in setting
 `OAUTH_ALLOW_NATIVE_LOOPBACK=true` for this desktop flow. Only the port varies.
 Other paths, hosts, and web callbacks do not inherit this exception. A local
 probe without issuer identification used a suffixed callback; that configuration
-does not match Anybots and is deliberately unsupported. Actual dots login and
-event delivery still require account-backed verification.
+does not match Anybots and is deliberately unsupported. Actual cloud dots login,
+event delivery, and automatic reply processing were subsequently verified in the
+owner's live test.
 
 [OpenAI MCP Events](https://developers.openai.com/plugins/build/mcp-events)
 explicitly supports dots and requires MCP 2.0 revision `2026-07-28`.
@@ -70,12 +73,13 @@ observations establish a surface mismatch; the missing mapping is a candidate
 cause, not a proven sole cause. After registering the ChatGPT connection, the
 user reported successful authentication and recognition of Anybots and
 `inbox.ready` in the intended dot. Two callback-verification reservations were
-then observed in production, with no stored subscription. The remaining failure
-is in subscription setup; the task service hides its details behind an unexpected
+then observed in production, with no stored subscription. At that point the failure
+was in subscription setup; the task service hid its details behind an unexpected
 error. A subsequent authenticated attempt at 21:50:25Z established
 `callback_host_not_allowed` for `connectors.api.openai.com`. The exact host was
 reviewed and added to both service allowlists; see [callback diagnostics](callback-diagnostics.md)
-for the evidence. The signed challenge and live subscription still need verification.
+for the evidence. A subsequent retry created one active subscription. The live
+exchange then confirmed notification acceptance and authenticated inbox processing.
 
 The public Events documentation uses an example receiver hostname and does not
 publish a production callback hostname. The exact hostname must be observed from
@@ -136,10 +140,10 @@ not a versioned webhook API guarantee or proof that our account works.
 The recipe lists both `Authorization: Bearer` and `X-Automation-Key` headers.
 A [Cursor staff example](https://forum.cursor.com/t/automation-webhook-returns-http-400-while-scheduled-trigger-works/171792)
 dated 2026-09-16 uses only Bearer authorization for an automation webhook.
-Anybots currently sends the UI-issued key as a Bearer credential only. Whether
-the additional header is required for the owner's personal Bot must be checked
-against that routine's current UI and one controlled account test; the sources
-do not establish it as universally mandatory. The older author-maintained
+Anybots sends the UI-issued key as a Bearer credential only. The owner's controlled
+test on 2026-10-03 confirmed two Grok notifications accepted with this configuration,
+followed by authenticated inbox processing. This verifies the configured routine;
+it does not establish a universal header contract. The older author-maintained
 [grokbot-mcp-bridge specification](https://github.com/kinopeee/grokbot-mcp-bridge/blob/main/SPEC.md)
 also uses Bearer authorization, but is independent implementation evidence.
 
@@ -189,11 +193,11 @@ finish the returned turn through `turn_finish`, obey `expectsReply`, and exit
 when the inbox is empty. A separate polling service, model API, or callback URL
 in the payload is not needed for this design.
 
-This behavior remains unverified with an actual Grok Bot account. The adapter
+This behavior passed with the owner's actual Grok Bot on 2026-10-03. The adapter
 returns `configuration_required` unless the operator explicitly enables the
 experimental adapter and supplies a binding-specific webhook URL and key.
 
-The personal-Bot onboarding path above still requires an account test. The
+The personal-Bot onboarding path above passed for the pilot owner. The
 [2026-09-17 staff correction](https://forum.cursor.com/t/grok-bot-custom-mcp-oauth-fails-before-sign-in-redirect-uri-not-allowed/171877)
 states that personal Bot connectors use OAuth and there was no safe UI for
 arbitrary secret headers, despite an API-level headers parameter. Do not tell
@@ -210,7 +214,8 @@ reported redirect list is:
 
 The [operator-provisioned OAuth pilot](oauth.md) implements authorization code
 with PKCE, short-lived access and rotating refresh tokens. Account-backed
-onboarding and the client's exact DCR behavior remain unverified. Do not generalize Team Bot secret
+onboarding passed for both pilot connections; live renewal and removal remain
+separate checks. Do not generalize Team Bot secret
 handling to a personal Bot. The
 [shared-computer documentation](https://docs.x.ai/grok-bot/computer-and-apps)
 also states that all Bots on an account share credentials and browser sessions;
