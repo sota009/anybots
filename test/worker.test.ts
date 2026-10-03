@@ -12,7 +12,7 @@ let conversation: { conversationId: string; messageId: string };
 beforeAll(async () => { db = await testDatabase(); relay = new Relay(db.pool); });
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
-  await db.pool.query("UPDATE outbox SET status='cancelled' WHERE status='pending'");
+  await db.pool.query('TRUNCATE bindings CASCADE');
   a = await relay.provisionBinding({ ownerId: crypto.randomUUID(), runtimeScope: crypto.randomUUID(), provider: 'dots' });
   b = await relay.provisionBinding({ ownerId: crypto.randomUUID(), runtimeScope: crypto.randomUUID(), provider: 'grok' });
   await relay.grantPair(a.bindingId, b.bindingId);
@@ -77,7 +77,7 @@ it('cancels expired work before sending', async () => {
   expect((await read()).outbox[0]!.status).toBe('cancelled');
 });
 
-it('enforces owner-wide notification limits across bindings', async () => {
+it('fails permanently when historical attempts already exceed the global budget', async () => {
   const owner = (await relay.authenticate(b.token)).ownerId;
   await db.pool.query(`INSERT INTO delivery_attempts(id,outbox_id,binding_id,owner_id,status)
     SELECT gen_random_uuid(),o.id,o.binding_id,$2,'accepted' FROM outbox o CROSS JOIN generate_series(1,60)
@@ -86,7 +86,7 @@ it('enforces owner-wide notification limits across bindings', async () => {
   await dispatchOne(db.pool, { deliver: async () => { sent = true; return { status: 'accepted' }; } });
   expect(sent).toBe(false);
   const row = (await db.pool.query('SELECT status,last_error,attempts FROM outbox WHERE message_id=$1', [conversation.messageId])).rows[0];
-  expect(row).toEqual({ status: 'pending', last_error: 'rate_limited', attempts: 0 });
+  expect(row).toEqual({ status: 'failed', last_error: 'budget_exceeded', attempts: 0 });
 });
 
 it('uses the held database connection during dispatch even with a single pool slot', async () => {

@@ -33,3 +33,10 @@ jobs:
       - run: npm run check
       - run: npm audit --omit=dev --audit-level=high
       - run: docker build -t anybots:ci .
+      - name: Verify non-root operator directories
+        run: >-
+          docker run --rm anybots:ci node -e
+          'const fs=require("node:fs"); if(process.getuid()===0)throw Error("root user");
+          for(const path of ["/app/.local","/home/node/.ssh"]){
+          fs.accessSync(path,fs.constants.W_OK);
+          if((fs.statSync(path).mode & 511)!==448)throw Error("private directory permissions");}'

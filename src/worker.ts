@@ -3,8 +3,20 @@ import type { Pool } from 'pg';
 import type { NotificationDispatcher, DeliveryResult } from './providers/index.js';
 
 const MAX_ATTEMPTS = 3;
-const HOURLY_LIMIT = 60;
+const DAILY_NOTIFICATION_BUDGET = 20;
+const MONTHLY_NOTIFICATION_BUDGET = 100;
 const LOCK_KEY = 718401;
+
+/** Calendar windows use the DB timestamp and UTC, independent of host timezone. */
+export function notificationBudgetWindows(at: Date) {
+  const year = at.getUTCFullYear(), month = at.getUTCMonth(), day = at.getUTCDate();
+  return {
+    dayStart: new Date(Date.UTC(year, month, day)),
+    dayEnd: new Date(Date.UTC(year, month, day + 1)),
+    monthStart: new Date(Date.UTC(year, month, 1)),
+    monthEnd: new Date(Date.UTC(year, month + 1, 1)),
+  };
+}
 
 /**
  * Session lock orders stop/revoke against network activity. Persist uncertain
@@ -25,9 +37,9 @@ export async function dispatchOne(pool: Pool, dispatcher: NotificationDispatcher
     await client.query('BEGIN'); inTransaction = true;
     const rows = await client.query<{
       id: string; binding_id: string; conversation_id: string; message_id: string;
-      provider: 'dots' | 'grok'; owner_id: string; attempts: number; created_at: Date;
+      provider: 'dots' | 'grok'; owner_id: string; attempts: number; created_at: Date; attempt_at: Date;
       valid: boolean;
-    }>(`SELECT o.*, b.provider, b.owner_id,
+    }>(`SELECT o.*, b.provider, b.owner_id, now() AS attempt_at,
        (b.active AND a.active AND z.active AND c.status='open' AND c.epoch=o.epoch
         AND c.expires_at>now() AND g.active) AS valid
        FROM outbox o JOIN bindings b ON b.id=o.binding_id
@@ -43,17 +55,20 @@ export async function dispatchOne(pool: Pool, dispatcher: NotificationDispatcher
       await client.query("UPDATE outbox SET status=$2,updated_at=now() WHERE id=$1", [row.id, row.valid ? 'failed' : 'cancelled']);
       await client.query('COMMIT'); inTransaction = false; return true;
     }
-    const counts = await client.query<{ binding_count: string; owner_count: string }>(
-      `SELECT count(*) FILTER(WHERE binding_id=$1) AS binding_count, count(*) AS owner_count
-       FROM delivery_attempts WHERE owner_id=$2 AND started_at>now()-interval '1 hour'`, [row.binding_id, row.owner_id]);
-    const count = counts.rows[0]!;
-    if (Number(count.binding_count) >= HOURLY_LIMIT || Number(count.owner_count) >= HOURLY_LIMIT) {
-      await client.query("UPDATE outbox SET next_attempt_at=now()+interval '1 minute',last_error='rate_limited',updated_at=now() WHERE id=$1", [row.id]);
+    const window = notificationBudgetWindows(row.attempt_at);
+    const budget = (await client.query<{ day_count: string; month_count: string }>(
+      `SELECT count(*) FILTER(WHERE started_at >= $1 AND started_at < $2) AS day_count,
+         count(*) AS month_count FROM delivery_attempts WHERE started_at >= $3 AND started_at < $4`,
+      [window.dayStart, window.dayEnd, window.monthStart, window.monthEnd])).rows[0]!;
+    if (Number(budget.day_count) >= DAILY_NOTIFICATION_BUDGET || Number(budget.month_count) >= MONTHLY_NOTIFICATION_BUDGET) {
+      // Terminal: a budget rejection must not silently wake the AI tomorrow.
+      // No attempt is charged because the dispatcher will not be called.
+      await client.query("UPDATE outbox SET status='failed',last_error='budget_exceeded',updated_at=now() WHERE id=$1", [row.id]);
       await client.query('COMMIT'); inTransaction = false; return true;
     }
     const attemptId = randomUUID();
-    await client.query(`INSERT INTO delivery_attempts(id,outbox_id,binding_id,owner_id,status) VALUES($1,$2,$3,$4,'uncertain')`,
-      [attemptId, row.id, row.binding_id, row.owner_id]);
+    await client.query(`INSERT INTO delivery_attempts(id,outbox_id,binding_id,owner_id,status,started_at) VALUES($1,$2,$3,$4,'uncertain',$5)`,
+      [attemptId, row.id, row.binding_id, row.owner_id, row.attempt_at]);
     await client.query("UPDATE outbox SET status='uncertain',attempts=attempts+1,last_error='delivery_in_progress',updated_at=now() WHERE id=$1", [row.id]);
     await client.query('COMMIT'); inTransaction = false;
     if (abort.signal.aborted) return true;

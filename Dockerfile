@@ -13,6 +13,7 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node package.json ./
 COPY --chown=node:node migrations ./migrations
+RUN install -d -m 700 -o node -g node /app/.local /home/node/.ssh
 USER node
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

@@ -56,7 +56,7 @@ Notification dispatch is disabled by default. To enable it, set `NOTIFICATIONS_E
 
 Grok additionally requires explicit `GROK_EXPERIMENTAL=true`, `OAUTH_ISSUER`, a live OAuth connection for the recipient, and a private `GROK_CONFIG_FILE`. Its shape maps a provisioned Grok binding UUID to `{"url":"<UI-issued webhook URL>","secret":"<UI-issued key>"}`. Keep this file out of Git and do not place it in chat. This experimental request envelope has not been validated with a real Bot. See [provider evidence](docs/providers.md) for exact evidence and onboarding limits.
 
-The worker persists an `uncertain` attempt before issuing HTTP while holding the same database ordering lock as stop/revoke. Crashes and network ambiguity remain uncertain without automatic replay. Explicit transient HTTP responses retry at most three times, honoring Retry-After; owner and binding dispatch budgets are 60 attempts/hour. One live dots subscription per binding prevents two contexts from sharing the same inbox. HTTP receipt does not prove agent consumption.
+The worker persists an `uncertain` attempt before issuing HTTP while holding the same database ordering lock as stop/revoke. Crashes and network ambiguity remain uncertain without automatic replay. Explicit transient HTTP responses retry at most three times, honoring Retry-After. The pilot caps all notification attempts at 20 per UTC day and 100 per UTC calendar month across every owner and provider; failures and retries count too. Exhausted notifications fail with `budget_exceeded` and do not automatically resume the next day. These limits bound notification attempts, not the receiver's internal AI work or the hosting bill. One live dots subscription per binding prevents two contexts from sharing the same inbox. HTTP receipt does not prove agent consumption.
 
 The current operator must reconcile uncertain external work before resuming that runtime. No recovery button or SQL recipe is supplied that would blindly repeat side effects.
 
@@ -71,4 +71,4 @@ docker run --rm --env-file /private/path/anybots.env -p 127.0.0.1:3000:3000 anyb
 docker run --rm --env-file /private/path/anybots.env anybots:local node dist/worker-main.js
 ```
 
-This repository supplies a container, not a deployed service. Configure [OAuth](docs/oauth.md), choose hosting, and connect real owners' integrations before recording account-backed success.
+See the [Render deployment record](docs/render-deployment.md) for launch configuration and verified deployment status. Configure [OAuth](docs/oauth.md) and connect real owners' integrations before recording account-backed success.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3
+
+- Cap all notification attempts at 20 per UTC day and 100 per UTC calendar month, including failed attempts and retries. Stop exhausted notifications without next-day replay.
+- Remove the superseded hourly notification limit and verify concurrent workers cannot overrun the shared budget.
+- Prepare private writable operator directories for the non-root Render container and verify them in CI.
+- Document the approved fixed-size Render launch and the limits of hosting cost controls.
+
 ## 0.1.2
 
 - Add a bounded OAuth pilot with exact callback registration, S256 PKCE, browser-only one-time pairing, short access tokens, rotating refresh tokens and revocation.
