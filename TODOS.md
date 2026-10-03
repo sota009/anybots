@@ -4,6 +4,10 @@
 
 Run both directions with the actual existing agents: notification accepted, inbox claimed, reply committed, original agent resumed. Record timestamps and manual interventions without secrets or unnecessary message content. Requires a public HTTPS endpoint and each owner's consent and account setup. Local integration tests do not close this item.
 
+## Operator SSH activation
+
+The secure remote admin wrapper and read-only readiness command are implemented. Register the dedicated public key in the operator Render account, verify real SSH access, then provision the two pilot bindings and issue browser pairing codes immediately before account setup. Do not mistake mocked SSH tests for live operator access.
+
 ## Verify OAuth onboarding with real providers
 
 Authorization code + PKCE, one-time browser pairing, resource metadata, refresh rotation and revocation are implemented and tested locally. Prove login, exact redirect handling, token renewal, target-agent identity and connector removal in each real provider. Check whether the actual client accepts public DCR with token auth method `none`; other methods are intentionally unsupported. Never ask owners to paste credentials into an AI conversation.

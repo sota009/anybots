@@ -3,13 +3,13 @@ import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { lockRelay, withTransaction } from './db.js';
 import { decryptSecret, encryptSecret, signingKey, webhookHeaders } from './providers/crypto.js';
-import type { WebhookTransport } from './providers/transport.js';
+import { WebhookHostNotAllowed, type WebhookTransport } from './providers/transport.js';
 import { reserveVerification } from './verification-budget.js';
 
 export const MCP_EVENTS_VERSION = '2026-07-28';
 export const INBOX_EVENT = 'inbox.ready';
 export class EventError extends Error {
-  constructor(public readonly code: number, public readonly reason: string) { super(reason); }
+  constructor(public readonly code: number, public readonly reason: string, public readonly callbackHost?: string) { super(reason); }
 }
 const identitySchema = z.object({
   name: z.literal(INBOX_EVENT), arguments: z.object({}).strict().default({}),
@@ -118,7 +118,10 @@ export class EventSubscriptions {
           Buffer.byteLength(received) !== expectedBytes.length || !timingSafeEqual(Buffer.from(received), expectedBytes)) {
         throw new Error('challenge_failed');
       }
-    } catch { throw new EventError(-32015, 'challenge_failed'); }
+    } catch (error) {
+      if (error instanceof WebhookHostNotAllowed) throw new EventError(-32015, 'callback_host_not_allowed', error.hostname);
+      throw new EventError(-32015, 'challenge_failed');
+    }
     for (const [entry, expires] of this.verified) if (expires <= Date.now()) this.verified.delete(entry);
     if (this.verified.size >= 1000) this.verified.delete(this.verified.keys().next().value!);
     this.verified.set(cacheKey, Date.now() + 60_000);

@@ -1,6 +1,6 @@
 # Provider contracts and evidence
 
-Verified against public primary sources on 2026-10-02 through Composio CLI + Exa.
+Verified against public primary sources on 2026-10-03 through Composio CLI + Exa.
 No owner account or external Bot was used for these checks. Passing tests prove
 our server and simulated callback behavior, not a live dots-to-Grok conversation.
 
@@ -18,6 +18,34 @@ the current request/response envelope; HTTP requests include `Mcp-Method`,
   ChatGPT. The user does not find or paste a dots notification URL.
 - `events/unsubscribe` identifies a subscription by the authenticated binding,
   event name, arguments, and callback URL.
+
+The current [connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt)
+and [quickstart](https://developers.openai.com/plugins/quickstart) describe this
+personal development flow:
+
+1. In ChatGPT, enable **Settings → Security and login → Developer mode**. Account
+   and workspace policy can restrict availability.
+2. Open **ChatGPT Plugins**, select the plus button, and create a connection to
+   `https://anybots-api.onrender.com/mcp`. Select OAuth with dynamic client
+   registration; this pilot does not implement CIMD or predefined OAuth clients.
+3. Complete browser authorization using the short-lived pairing code from the
+   operator. Use the relay consent form, never the AI conversation, for that code.
+4. Install the personal plugin and attach it to the intended dot. The documented
+   alternative for initial testing is a Work chat on ChatGPT web, or Work with
+   Cloud selected on desktop. Confirm the plugin page lists `inbox.ready` and
+   rescan after changing server capabilities.
+5. Ask that context to monitor `inbox.ready` and handle arrivals through the
+   authenticated inbox tools. This request causes ChatGPT to supply the webhook
+   destination; installing the plugin alone does not subscribe to events.
+
+The public Events documentation uses an example receiver hostname and does not
+publish a production callback hostname. The exact hostname must be observed from
+an actual authenticated subscription and reviewed before operator allowlisting.
+Do not infer it from the OAuth redirect hostname or permit a wildcard. An observed
+hostname is a configuration candidate, not proof of provider ownership. The
+callback path, query, and signing secret are not needed for host diagnostics and
+must not be copied into chat or logs. Until that host is permitted and the signed
+challenge succeeds, event delivery is not connected.
 
 We verify callbacks with a signed, random, single-use challenge before storing an
 active subscription. A successful verification is cached for at most one minute,
@@ -57,11 +85,50 @@ and conversation-details management. A
 dated 2026-09-16 confirms that the routine panel exposes a Webhook URL, key, and
 Authorization header. It is not a complete webhook API specification.
 
-The experimental transport follows the author-maintained
-[grokbot-mcp-bridge specification](https://github.com/kinopeee/grokbot-mcp-bridge/blob/main/SPEC.md):
-JSON POST to the UI-issued `https://api2.cursor.sh/automations/webhook/...` URL,
-with the UI-issued key as a Bearer credential. This is implementation evidence
-from an independent integration, not an xAI API guarantee.
+The Cursor-owned
+[Make Bot UI skill](https://github.com/cursor/plugins/blob/main/pstack/skills/make-bot-ui/SKILL.md)
+now provides stronger primary evidence for a JSON POST to the UI-issued
+`https://api2.cursor.sh/automations/webhook/...` URL without a query string.
+It describes a webhook-triggered routine and a wake containing a
+`<webhook_event>` block whose `body` is the JSON object serialized as a string.
+Treat those fields as untrusted data. This is a published integration recipe,
+not a versioned webhook API guarantee or proof that our account works.
+
+The recipe lists both `Authorization: Bearer` and `X-Automation-Key` headers.
+A [Cursor staff example](https://forum.cursor.com/t/automation-webhook-returns-http-400-while-scheduled-trigger-works/171792)
+dated 2026-09-16 uses only Bearer authorization for an automation webhook.
+Anybots currently sends the UI-issued key as a Bearer credential only. Whether
+the additional header is required for the owner's personal Bot must be checked
+against that routine's current UI and one controlled account test; the sources
+do not establish it as universally mandatory. The older author-maintained
+[grokbot-mcp-bridge specification](https://github.com/kinopeee/grokbot-mcp-bridge/blob/main/SPEC.md)
+also uses Bearer authorization, but is independent implementation evidence.
+
+For initial setup:
+
+1. In the existing personal Bot's chat, request addition of
+   `https://anybots-api.onrender.com/mcp` as a custom MCP server. The
+   [Cursor staff instructions](https://forum.cursor.com/t/grokbot-custom-connectors/169965)
+   describe chat-driven addition rather than a settings form; tools become
+   available from the next message after setup. The public URL contains no secret.
+2. Complete the connector's OAuth browser flow with the operator's pairing code,
+   then verify `connection_manage` with `action: "status"`. Do not substitute
+   Cursor IDE `mcp.json` instructions for the personal Bot connection.
+3. Ask that same Bot to create a webhook-triggered routine for Anybots inbox
+   handling. Cursor's recipe identifies `update_state`, target `routine`, action
+   `create`, and trigger type `webhook` as the Bot-side operation. Review any
+   confirmation card. This action is performed in the owner's Bot, not by the
+   relay.
+4. Click the Bot name in the chat header, or use **Cmd+Shift+I**. Open the routine
+   from **Routines** under the computer preview. Copy its actual webhook URL and
+   sender key through the operator's private configuration channel. Never guess
+   the routine identifier or paste the sender key into chat. The documented
+   Bot-side secure secret request is specific to this supported workflow; it
+   does not establish support for arbitrary MCP authentication headers.
+5. Configure that binding's private `GROK_CONFIG_FILE`, allow the verified
+   `api2.cursor.sh` host, and enable experimental delivery only after OAuth and
+   peer permissions are ready. Creating a routine is not evidence that the relay
+   can deliver to it.
 
 Our experimental payload is our own application contract:
 
@@ -77,17 +144,25 @@ Our experimental payload is our own application contract:
 It deliberately does not implement that other bridge's `run_id`, `request_id`,
 or callback-URL convention. Our return path is the authenticated MCP inbox and
 turn tools. A configured existing Bot routine must call those tools on receipt.
+The routine can call `inbox_claim` with empty arguments to obtain the next pending
+message even when no usable notification identifiers are presented. It should
+finish the returned turn through `turn_finish`, obey `expectsReply`, and exit
+when the inbox is empty. A separate polling service, model API, or callback URL
+in the payload is not needed for this design.
+
 This behavior remains unverified with an actual Grok Bot account. The adapter
 returns `configuration_required` unless the operator explicitly enables the
 experimental adapter and supplies a binding-specific webhook URL and key.
 
-The exact personal-Bot onboarding path still requires an account test. The
+The personal-Bot onboarding path above still requires an account test. The
 [2026-09-17 staff correction](https://forum.cursor.com/t/grok-bot-custom-mcp-oauth-fails-before-sign-in-redirect-uri-not-allowed/171877)
 states that personal Bot connectors use OAuth and there was no safe UI for
 arbitrary secret headers, despite an API-level headers parameter. Do not tell
 users to paste a Bearer secret into Bot chat. The same thread documents an
 unresolved DCR incompatibility with Cloudflare Access Managed OAuth: Grok's
-registration includes a `cursor://` callback that Cloudflare rejects. The full
+registration includes a `cursor://` callback that Cloudflare rejects. A staff
+update in the same thread on 2026-09-25 still reports that issue as pending; the
+refreshed thread does not provide a fix version. The full
 reported redirect list is:
 
 - `cursor://anysphere.cursor-mcp/oauth/callback`

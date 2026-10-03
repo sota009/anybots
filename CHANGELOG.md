@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- Add an operator-only read-only onboarding snapshot for OAuth, pair permissions, notification setup, and message/delivery counts without credentials or message content.
+- Add an SSH admin helper with strict response validation, private credential files, bounded I/O, and no automatic retries.
+- Report only an unlisted callback hostname to the authenticated subscriber, retaining outbound denial and hiding URL paths, query strings, and signing keys.
+- Document current provider onboarding and the remaining real-account verification steps.
+
 ## 0.1.4
 
 - Prevent already rate-limited OAuth requests from exhausting the shared allowance of other clients.

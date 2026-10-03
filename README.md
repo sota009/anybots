@@ -78,3 +78,7 @@ docker run --rm --env-file /private/path/anybots.env anybots:local node dist/wor
 ```
 
 See the [Render deployment record](docs/render-deployment.md) for launch configuration and verified deployment status. Configure [OAuth](docs/oauth.md) and connect real owners' integrations before recording account-backed success.
+
+## First account connection
+
+Follow the [first-connection guide](docs/first-connection.md). The [remote admin helper](docs/remote-admin.md) securely retrieves short-lived pairing codes over operator SSH. Use the [read-only status command](docs/onboarding-readiness.md) to distinguish configured connections from a verified real-agent exchange. Unlisted dots callback destinations return [host-only diagnostics](docs/callback-diagnostics.md) and remain blocked until the operator verifies and allows the exact host.
