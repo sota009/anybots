@@ -5,6 +5,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import { Relay, RelayError } from './relay.js';
+import { EventError } from './events.js';
 
 const MAX_HTTP_BODY_BYTES = 128 * 1024;
 const id = z.uuid();
@@ -81,7 +82,7 @@ export function buildApp(relay: Relay, options: AppOptions = {}) {
 }
 
 function createRelayServer(relay: Relay, token: string, events?: EventHooks) {
-  const server = new McpServer({ name: 'anybots', version: '0.1.4' });
+  const server = new McpServer({ name: 'anybots', version: '0.1.5' });
   const register = <T extends z.ZodObject>(
     name: string, description: string, inputSchema: T, action: (input: z.output<T>) => Promise<unknown>, readOnlyHint = false,
   ) => {
@@ -153,7 +154,9 @@ function createRelayServer(relay: Relay, token: string, events?: EventHooks) {
         } catch (error) {
           if (typeof error === 'object' && error !== null && 'code' in error && 'reason' in error
             && typeof error.code === 'number' && typeof error.reason === 'string') {
-            throw new ProtocolError(error.code, 'Event request failed', { reason: error.reason });
+            throw new ProtocolError(error.code, 'Event request failed', { reason: error.reason,
+              ...(error instanceof EventError && error.reason === 'callback_host_not_allowed' && error.callbackHost
+                ? { callbackHost: error.callbackHost } : {}) });
           }
           throw new ProtocolError(-32603, 'Event request failed');
         }

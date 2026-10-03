@@ -1,6 +1,6 @@
 {
   "name": "anybots",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "engines": {
@@ -16,7 +16,8 @@
     "admin": "tsx src/admin.ts",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
-    "worker": "node dist/worker-main.js"
+    "worker": "node dist/worker-main.js",
+    "admin:remote": "node scripts/remote-admin.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/fastify": "2.0.1",

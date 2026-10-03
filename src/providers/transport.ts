@@ -25,13 +25,18 @@ export function isPublicAddress(address: string): boolean {
   return family === 6 && /^[23][0-9a-f]{3}:/i.test(address) && !blocked.check(address, 'ipv6');
 }
 
+export class WebhookHostNotAllowed extends Error {
+  constructor(public readonly hostname: string) { super('webhook_destination_rejected'); }
+}
+
 export function validateWebhookUrl(value: string, allowedHosts: readonly string[]): URL {
   const url = new URL(value);
   if (url.protocol !== 'https:' || url.username || url.password || url.hash ||
-      (url.port && url.port !== '443') || !allowedHosts.includes(url.hostname) ||
+      (url.port && url.port !== '443') ||
       isIP(url.hostname.replace(/^\[|\]$/g, ''))) {
     throw new Error('webhook_destination_rejected');
   }
+  if (!allowedHosts.includes(url.hostname)) throw new WebhookHostNotAllowed(url.hostname);
   return url;
 }
 
