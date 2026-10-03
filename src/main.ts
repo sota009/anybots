@@ -16,6 +16,7 @@ const pool = new pg.Pool({ connectionString: databaseUrl });
 const notifications = process.env.NOTIFICATIONS_ENABLED === 'true' ? await notificationOptions() : undefined;
 const oauth = oauthFromEnvironment(pool);
 const app = buildApp(new Relay(pool, oauth ? { oauthResource: oauth.resource } : {}), {
+  onEventDiagnostic: diagnostic => console.log(JSON.stringify(diagnostic)),
   ...(allowedHosts ? { allowedHosts } : {}),
   ...(notifications ? { events: new EventSubscriptions(pool, notifications) } : {}),
   ...(oauth ? { oauth } : {}),
