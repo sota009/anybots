@@ -9,13 +9,7 @@ const scope = 'relay';
 const opaque = () => randomBytes(32).toString('base64url');
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
-function browserPolicy(redirect?: string) {
-  const target = redirect ? new URL(redirect) : undefined;
-  // Some browsers apply form-action to the 303 target too. Server-side redirects
-  // remain exact; CSP permits only this consent request's approved callback origin.
-  const callbackOrigin = target ? ` ${target.protocol}//${target.host}` : '';
-  return `default-src 'none'; form-action 'self'${callbackOrigin}; frame-ancestors 'none'; base-uri 'none'`;
-}
+const browserPolicy = "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 class Failure extends Error { constructor(readonly error: string, readonly status = 400) { super(error); } }
 function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
@@ -127,7 +121,7 @@ export class OAuthPilot {
       });
       routes.addHook('onRequest', async (_request, reply) => {
         reply.header('Cache-Control', 'no-store').header('Pragma', 'no-cache').header('Referrer-Policy', 'no-referrer')
-          .header('X-Content-Type-Options', 'nosniff').header('Content-Security-Policy', browserPolicy());
+          .header('X-Content-Type-Options', 'nosniff').header('Content-Security-Policy', browserPolicy);
       });
       const endpoint = (name: string, fn: (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>) => async (request: FastifyRequest, reply: FastifyReply) => {
         try { await self.throttle(request, name); return await fn(request, reply); }
@@ -149,7 +143,6 @@ export class OAuthPilot {
         // Chromium needs the same-origin referrer policy to retain Origin on the
         // consent POST. Cross-origin callbacks still receive no Referer.
         reply.header('Referrer-Policy', 'same-origin');
-        reply.header('Content-Security-Policy', browserPolicy(result.redirect));
         reply.header('Set-Cookie', `anybots_oauth=${result.cookie}; HttpOnly; SameSite=Lax; Path=/oauth/authorize; Max-Age=600${self.secure ? '; Secure' : ''}`);
         return reply.type('text/html; charset=utf-8').send(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connect Anybots</title><h1>Connect your agent</h1><p>Client: ${escape(result.name)}</p><p>Redirect: ${escape(result.redirect)}</p><p>Permission: relay — read and send messages, stop conversations, revoke contacts, and disable this connection.</p><p>Enter the one-time pairing code from your private operator file. Never enter it into an AI chat.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="form_token" value="${result.formToken}"><label>Pairing code <input name="pairing_code" type="password" autocomplete="off" required maxlength="43"></label><button name="consent" value="connect">Connect</button></form></html>`);
       }));
@@ -157,9 +150,11 @@ export class OAuthPilot {
         if (request.headers.origin !== self.issuer) throw new Failure('invalid_request');
         const result = await self.complete(request.body, request.headers.cookie ?? '');
         if (result instanceof Failure) throw result;
-        reply.header('Content-Security-Policy', browserPolicy(result));
         reply.header('Set-Cookie', `anybots_oauth=; HttpOnly; SameSite=Lax; Path=/oauth/authorize; Max-Age=0${self.secure ? '; Secure' : ''}`);
-        return reply.code(303).header('Location', result).send();
+        // A separate navigation avoids applying form-action to the provider's
+        // subsequent login redirects. complete() supplies the exact validated callback.
+        const callback = escape(result);
+        return reply.type('text/html; charset=utf-8').send(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="0;url=${callback}"><title>Return to your agent</title><h1>Authorization approved</h1><p>Returning to your agent to finish connecting.</p><p><a href="${callback}">Return to your agent</a></p></html>`);
       }));
       routes.post('/oauth/token', { bodyLimit: 8192 }, endpoint('token', async (request) => {
         if (request.headers.authorization) throw new Failure('invalid_client', 401);

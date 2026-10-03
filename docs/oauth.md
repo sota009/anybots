@@ -61,6 +61,16 @@ belongs only in that form. Do not paste it, the persistent development bearer,
 or OAuth tokens into an AI conversation. The form is the temporary setup-page
 exception; normal relay operations stay in the owner's agent.
 
+After consent succeeds, the relay returns a separate, non-cacheable HTML page
+that immediately navigates to the exact validated callback. If navigation does
+not happen, select **Return to your agent**. This page contains no pairing code
+or consent form. It uses an escaped meta refresh and link, without JavaScript,
+and sends no referrer. A callback may redirect onward to the provider's login
+page; navigation is no longer part of the consent form submission, whose CSP
+allows only same-origin submissions. Refreshing or resubmitting the old consent
+form cannot authorize again. Restart the provider flow if the authorization
+code's two-minute lifetime has elapsed.
+
 A pairing code is operator-provisioned identity evidence, not independent login
 or account recovery. The operator must establish the owner, intended agent, and
 runtime scope before issuing it. OAuth authorization does not create peer grants;
@@ -82,7 +92,8 @@ sharing the same provider credentials.
   Access tokens last at most fifteen minutes. Refresh credentials rotate on every
   use, with an absolute thirty-day family lifetime. Reuse revokes the family.
 - Pairing codes, form/cookie tokens, authorization codes, access tokens, and refresh
-  tokens are stored as SHA-256 hashes. Browser pages use no-store, HTML escaping, and a restrictive CSP. The consent
+  tokens are stored as SHA-256 hashes. Browser pages use no-store, HTML escaping,
+  and CSP `default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`. The consent
   form uses `Referrer-Policy: same-origin` so Chromium sends a valid Origin on
   the same-origin consent POST while withholding the referrer from external
   callbacks. Other OAuth responses use `no-referrer`. Tokens are not included in relay results.
@@ -107,3 +118,21 @@ require resource audience validation, PKCE support, short-lived credentials, and
 refresh rotation for public clients. Live-provider compatibility remains a
 separate acceptance test. Grok notification payload behavior is still experimental,
 and passing OAuth alone does not prove a reply or autonomous multi-turn exchange.
+
+## Browser handoff regression (2026-10-03)
+
+A gstack Chromium 145 test with three local HTTP origins reproduced the old
+behavior: consent POST → 303 allowed callback → 302 another login origin was
+blocked by `form-action`, leaving the already-consumed form visible. Direct
+callback navigation succeeded. The new POST 200 handoff reached both the direct
+callback and the additional login origin without console errors. These were
+isolated fixtures, not a real Grok account connection. The production request log
+showed a successful consent followed by a rejected replay and no token exchange;
+the provider's complete redirect chain was not captured.
+
+[MDN form-action](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/form-action)
+documents browser differences for redirects after form submissions.
+[MDN meta http-equiv](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/http-equiv)
+documents refresh navigation. Both were checked through Composio Exa on the date
+above. Do not expand callback or CSP origin allowlists to accommodate an unknown
+provider login chain.

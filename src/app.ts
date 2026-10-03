@@ -82,7 +82,7 @@ export function buildApp(relay: Relay, options: AppOptions = {}) {
 }
 
 function createRelayServer(relay: Relay, token: string, events?: EventHooks) {
-  const server = new McpServer({ name: 'anybots', version: '0.1.5' });
+  const server = new McpServer({ name: 'anybots', version: '0.1.6' });
   const register = <T extends z.ZodObject>(
     name: string, description: string, inputSchema: T, action: (input: z.output<T>) => Promise<unknown>, readOnlyHint = false,
   ) => {

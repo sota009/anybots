@@ -44,8 +44,17 @@ it('connects operator pairing, browser consent, OAuth tokens and the real MCP au
     const pairing = JSON.parse(await readFile(provisioned.credentialsFile, 'utf8'));
     const consent = await app.inject({ method: 'POST', url: '/oauth/authorize', headers: { ...headers, origin: issuer, cookie },
       payload: { form_token: formToken, pairing_code: pairing.pairingCode, consent: 'connect' } });
-    expect(consent.statusCode).toBe(303);
-    const code = new URL(String(consent.headers.location)).searchParams.get('code');
+    expect(consent.statusCode).toBe(200);
+    expect(consent.headers.location).toBeUndefined();
+    expect(consent.headers['cache-control']).toBe('no-store');
+    expect(consent.headers['referrer-policy']).toBe('no-referrer');
+    const href = consent.body.match(/<a href="([^"]+)">Return to your agent<\/a>/)?.[1];
+    expect(href).toBeTruthy();
+    const callback = new URL(href!.replace(/&amp;/g, '&'));
+    expect(`${callback.origin}${callback.pathname}`).toBe(redirect);
+    expect(callback.searchParams.get('state')).toBe('test-state');
+    expect(callback.searchParams.get('iss')).toBe(issuer);
+    const code = callback.searchParams.get('code');
     const exchange = await app.inject({ method: 'POST', url: '/oauth/token', headers,
       payload: { grant_type: 'authorization_code', client_id: clientId, code, redirect_uri: redirect, resource: oauth.resource, code_verifier: verifier } });
     expect(exchange.statusCode).toBe(200);

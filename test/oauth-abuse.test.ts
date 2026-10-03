@@ -48,8 +48,9 @@ describe('OAuth rate-limit isolation', () => {
     const consent = await app.inject({ method: 'POST', url: '/oauth/authorize', remoteAddress,
       headers: { origin: issuer, cookie: String(begin.headers['set-cookie']).split(';')[0]! },
       payload: { form_token: formToken, pairing_code: pairing.pairingCode, consent: 'connect' } });
-    expect(consent.statusCode).toBe(303);
-    const code = new URL(String(consent.headers.location)).searchParams.get('code')!;
+    expect(consent.statusCode).toBe(200);
+    const callback = consent.body.match(/<a href="([^"]+)">Return to your agent<\/a>/)![1]!.replaceAll('&amp;', '&');
+    const code = new URL(callback).searchParams.get('code')!;
 
     const responses = [];
     for (let i = 0; i < 100; i++) responses.push(await invalidTokenRequest('198.51.100.1'));
