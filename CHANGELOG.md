@@ -1,3 +1,9 @@
+## 0.1.7
+
+- Add an opt-in native desktop OAuth callback for 127.0.0.1 at /callback with a variable port, preserving exact redirect matching at code exchange.
+- Reuse the native client registration across port changes so reconnects do not consume the client registry limit.
+- Keep other callback URLs exact, native support disabled by default, and PKCE plus one-time browser pairing required.
+
 ## 0.1.6
 
 - Complete browser consent with a non-cacheable handoff page before navigating to the exact callback, so provider login redirects are not blocked by form-action CSP.

@@ -8,5 +8,6 @@ export function oauthFromEnvironment(pool: Pool, env: NodeJS.ProcessEnv = proces
   try { redirectUris = z.array(z.string().min(1)).min(1).max(4).parse(JSON.parse(env.OAUTH_REDIRECT_URIS ?? 'null')); }
   catch { throw new Error('OAUTH_REDIRECT_URIS must be a JSON array of exact approved callback URLs'); }
   return new OAuthPilot(pool, { issuer: env.OAUTH_ISSUER, redirectUris,
+    allowNativeLoopback: env.OAUTH_ALLOW_NATIVE_LOOPBACK === 'true',
     allowInsecureLocalhost: env.OAUTH_ALLOW_HTTP_LOCALHOST === 'true' && env.NODE_ENV !== 'production' });
 }

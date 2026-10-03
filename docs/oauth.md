@@ -25,6 +25,22 @@ needed by the actual client. The three Grok-related entries above come from the
 The `cursor://` entry is an explicit product-compatibility exception to MCP's
 HTTPS/localhost redirect guidance; it is not evidence of universal MCP compliance.
 
+For a local Codex client, enable `OAUTH_ALLOW_NATIVE_LOOPBACK=true`. This separate
+opt-in accepts only `http://127.0.0.1:<port>/callback`, with an explicit TCP port
+from 1 through 65535. It does not accept `localhost`, other IP addresses, other
+paths, credentials, query strings, fragments, or encoded aliases. The default is
+off; the four exact web callbacks remain unchanged. This is a browser redirect
+to the user's local OAuth listener, not permission for server-side HTTP requests.
+
+[Codex's MCP documentation](https://developers.openai.com/codex/mcp) requires
+variable loopback ports for native OAuth. With issuer identification advertised,
+installed Codex 0.160.0 was locally observed registering `/callback` on an
+ephemeral port. Registration identity excludes that port so reconnecting reuses
+the same client row; the registration response returns the requested URI. Consent
+and authorization codes retain the actual URI, and token exchange must match it
+exactly, including its port. No callback-ID suffix or arbitrary loopback path is
+enabled. This local reproduction does not establish a live dots connection.
+
 [OpenAI's authentication guide](https://developers.openai.com/plugins/build/auth)
 permits the stable ChatGPT callback above when the server advertises and returns
 issuer identification. This server does both. If the connection management page
@@ -100,9 +116,12 @@ sharing the same provider credentials.
 - Revocation and core relay mutations share the same database ordering lock.
   Token checks include family revocation, scope, resource, expiry, and active
   binding state. Disabling a binding invalidates its OAuth credentials.
-- Dynamic registration deduplicates the sorted redirect set. Four configured
-  redirects permit at most fifteen nonempty combinations, below the thirty-client
-  registry cap. Changing a client label does not allocate a new client.
+- Dynamic registration deduplicates the sorted redirect set, excluding only the
+  native callback's port when the opt-in is enabled. The four exact callbacks
+  alone permit fifteen nonempty combinations; adding the one native profile
+  permits thirty-one. All clients, including mixed native/web combinations,
+  share the thirty-two-client registry cap. Changing a
+  client label or native listener port does not allocate a new client.
 - Public operations have global and per-address minute limits. Live storage is
   bounded to 100 pairing codes, 256 consent requests, 1,000 token families, and
   50,000 token rows. Expired transient data is removed during OAuth transactions.
