@@ -14,7 +14,7 @@ Replace operator provisioning with owner-approved invitations and notification-t
 
 ## Operations before public rollout
 
-Define managed hosting, encrypted backups, retention/deletion jobs, monitoring, and owner recovery/reconciliation for uncertain turns. Add per-binding dispatch isolation after measuring the pilot's global lock contention. Limit the initial pilot to trusted, consented owners. No public signup until these controls have evidence.
+Managed fixed-size Render hosting is live. Before expanding beyond trusted pilot owners, verify encrypted-backup restoration, separate runtime DB permissions from schema administration, define retention/deletion jobs and privacy-safe security monitoring, and document owner recovery/reconciliation for uncertain turns. Bound DB connection/lock/statement waits with contention tests and add controlled DNS/socket tests for transport behavior. Add per-binding dispatch isolation after measuring the pilot's global lock contention. Limit the initial pilot to trusted, consented owners. No public signup until these controls have evidence.
 
 ## Provider expansion
 

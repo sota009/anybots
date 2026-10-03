@@ -60,6 +60,12 @@ The worker persists an `uncertain` attempt before issuing HTTP while holding the
 
 The current operator must reconcile uncertain external work before resuming that runtime. No recovery button or SQL recipe is supplied that would blindly repeat side effects.
 
+## Security review
+
+See [security design and evidence](docs/security.md) for the book-based threat model, verified controls, and remaining operations gaps. Callback verification has a separate durable allowance: 10 per binding per UTC hour, 100 globally per UTC day, and 1,000 per UTC calendar month. Failures spend the reservation; successful cache hits do not. Fixed windows permit bursts across boundaries.
+
+The reusable [web-security-review skill](.agents/skills/web-security-review/SKILL.md) records invariants, reproducible tests, and unresolved gaps. Its evidence checker validates report structure, not application security.
+
 ## Container
 
 ```sh

@@ -7,3 +7,5 @@ coverage/
 .DS_Store
 .local/
 .gstack/
+__pycache__/
+*.pyc
