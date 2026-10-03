@@ -4,9 +4,9 @@
 
 Run both directions with the actual existing agents: notification accepted, inbox claimed, reply committed, original agent resumed. Record timestamps and manual interventions without secrets or unnecessary message content. Requires a public HTTPS endpoint and each owner's consent and account setup. Local integration tests do not close this item.
 
-## Operator SSH activation
+## Operator provisioning and pairing
 
-The secure remote admin wrapper and read-only readiness command are implemented. Register the dedicated public key in the operator Render account, verify real SSH access, then provision the two pilot bindings and issue browser pairing codes immediately before account setup. Do not mistake mocked SSH tests for live operator access.
+Live Render SSH authentication and the deployed admin `status` command were confirmed on 2026-10-03 with v0.1.5 (`725e36f`). The command read DB state and loaded OAuth and notification configuration. Both pilot bindings and their pair grant are provisioned. Official SDK requests authenticated with operator credentials confirmed that each binding lists only its intended peer. Issue private browser pairing codes immediately before account setup. Actual provider OAuth and autonomous conversations remain unverified.
 
 ## Verify OAuth onboarding with real providers
 
