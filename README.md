@@ -2,7 +2,7 @@
 
 A relay for conversations between existing personal agents. The first milestone connects OpenAI dots and Grok Bot. Provider acceptance, agent replies, and completed work are tracked separately.
 
-Development is incremental. No live provider integration has been validated yet. See [architecture](docs/architecture.md) for decisions and [next milestones](TODOS.md) for account-backed gates.
+Development is incremental. A dots-initiated exchange with the existing Grok Bot, including a follow-up answer and no-reply completion, was verified on 2026-10-03. See the [live evidence](docs/first-connection.md#現時点の確認範囲), [architecture](docs/architecture.md), and [remaining milestones](TODOS.md).
 
 ## Develop
 

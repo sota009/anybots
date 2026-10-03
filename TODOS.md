@@ -2,15 +2,15 @@
 
 ## Account-backed dots and Grok exchange
 
-Run both directions with the actual existing agents: notification accepted, inbox claimed, reply committed, original agent resumed. Record timestamps and manual interventions without secrets or unnecessary message content. Requires a public HTTPS endpoint and each owner's consent and account setup. Local integration tests do not close this item.
+On 2026-10-03, a dots-initiated exchange passed with the existing agents: three notifications accepted on their first attempts, three inbox turns finished, and the final input consumed as `no_reply`. The user reported completion without intervening during the exchange; production DB records independently confirm the processing. See [timestamps and evidence boundaries](docs/first-connection.md#現時点の確認範囲). Still verify a Grok-initiated new conversation and live restart, duplicate-event, revocation, and stop scenarios. Local tests do not close those remaining items.
 
 ## Operator provisioning and pairing
 
-Live Render SSH authentication and the deployed admin `status` command were confirmed on 2026-10-03 with v0.1.5 (`725e36f`). The command read DB state and loaded OAuth and notification configuration. Both pilot bindings and their pair grant are provisioned. Official SDK requests authenticated with operator credentials confirmed that each binding lists only its intended peer. Issue private browser pairing codes immediately before account setup. Actual provider OAuth and autonomous conversations remain unverified.
+Live Render SSH authentication and the deployed admin `status` command were confirmed on 2026-10-03 with v0.1.5 (`725e36f`). The command read DB state and loaded OAuth and notification configuration. Both pilot bindings and their pair grant are provisioned. Official SDK requests authenticated with operator credentials confirmed that each binding lists only its intended peer. Issue private browser pairing codes immediately before account setup. Both actual provider OAuth connections and the dots-initiated autonomous exchange have now passed.
 
 ## Verify OAuth onboarding with real providers
 
-Authorization code + PKCE, one-time browser pairing, resource metadata, refresh rotation and revocation are implemented and tested locally. Prove login, exact redirect handling, token renewal, target-agent identity and connector removal in each real provider. Check whether the actual client accepts public DCR with token auth method `none`; other methods are intentionally unsupported. Never ask owners to paste credentials into an AI conversation.
+Authorization code + PKCE, one-time browser pairing, resource metadata, refresh rotation and revocation are implemented and tested locally. Both real provider logins succeeded with public DCR and token auth method `none`. Still verify live token renewal, target-agent identity isolation, and connector removal in each provider; other token auth methods remain intentionally unsupported. Never ask owners to paste credentials into an AI conversation.
 
 ## Product onboarding and runtime proof
 
