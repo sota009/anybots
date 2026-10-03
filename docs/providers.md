@@ -67,8 +67,12 @@ and Slack event sources and had no Anybots inbox tools. Source inspection of the
 personal Anybots plugin v0.1.0 found direct remote MCP configuration but no
 registered ChatGPT app mapping. A local Codex `agents_list` call succeeded. These
 observations establish a surface mismatch; the missing mapping is a candidate
-cause, not a proven sole cause. The intended dot's registration and attachment
-must still be checked in the account UI.
+cause, not a proven sole cause. After registering the ChatGPT connection, the
+user reported successful authentication and recognition of Anybots and
+`inbox.ready` in the intended dot. Two callback-verification reservations were
+then observed in production, with no stored subscription. The remaining failure
+is in subscription setup; the task service hides its details behind an unexpected
+error. API diagnostics must establish the reason before changing configuration.
 
 The public Events documentation uses an example receiver hostname and does not
 publish a production callback hostname. The exact hostname must be observed from
