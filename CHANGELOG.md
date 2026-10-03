@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+
+- Prevent already rate-limited OAuth requests from exhausting the shared allowance of other clients.
+- Reserve callback verification budgets in PostgreSQL before HTTP, including failures and concurrent requests; check caller authority and live subscription context before spending.
+- Add book-based security design, regression evidence, and a reusable web-security-review skill with a tested evidence checker.
+- Record remaining operational controls separately from verified protections.
+
 ## 0.1.3
 
 - Cap all notification attempts at 20 per UTC day and 100 per UTC calendar month, including failed attempts and retries. Stop exhausted notifications without next-day replay.

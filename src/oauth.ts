@@ -101,12 +101,13 @@ export class OAuthPilot {
     const accepted = await this.tx(async client => {
       if ((await client.query('SELECT count(*)::int AS n FROM oauth_rates')).rows[0].n >= 1024) return false;
       const minute = Math.floor(Date.now() / 60_000);
-      let allowed = true;
-      for (const [key, limit] of [[`all:${endpoint}:${minute}`, 100], [`ip:${hash(request.ip)}:${endpoint}:${minute}`, 20]] as const) {
+      // Rejected sources must not consume the shared allowance for other clients.
+      // Both admissions remain atomic under the existing relay transaction lock.
+      for (const [key, limit] of [[`ip:${hash(request.ip)}:${endpoint}:${minute}`, 20], [`all:${endpoint}:${minute}`, 100]] as const) {
         const result = await client.query('INSERT INTO oauth_rates(bucket,hits,expires_at) VALUES($1,1,clock_timestamp()+interval \'2 minutes\') ON CONFLICT(bucket) DO UPDATE SET hits=oauth_rates.hits+1 RETURNING hits', [key]);
-        if (result.rows[0].hits > limit) allowed = false;
+        if (result.rows[0].hits > limit) return false;
       }
-      return allowed;
+      return true;
     });
     if (!accepted) throw new Failure('temporarily_unavailable', 429);
   }

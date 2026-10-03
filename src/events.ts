@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { lockRelay, withTransaction } from './db.js';
 import { decryptSecret, encryptSecret, signingKey, webhookHeaders } from './providers/crypto.js';
 import type { WebhookTransport } from './providers/transport.js';
+import { reserveVerification } from './verification-budget.js';
 
 export const MCP_EVENTS_VERSION = '2026-07-28';
 export const INBOX_EVENT = 'inbox.ready';
@@ -52,28 +53,25 @@ export class EventSubscriptions {
     if (!parsed.success) throw new EventError(-32602, 'invalid_subscription');
     const params = parsed.data;
     try { signingKey(params.delivery.secret); } catch { throw new EventError(-32602, 'invalid_signing_secret'); }
-    const initial = await this.pool.query('SELECT id FROM bindings WHERE id=$1 AND active=true AND provider=\'dots\'', [bindingId]);
-    if (!initial.rowCount) throw new EventError(-32001, 'binding_unavailable');
     const id = subscriptionId(bindingId, params.name, params.delivery.url, params.arguments);
-    await this.verifyCallback(bindingId, id, params.delivery.url, params.delivery.secret);
+    const cacheKey = createHash('sha256').update(canonicalJson([bindingId, params.delivery.url, params.delivery.secret])).digest('hex');
+    const needsVerification = await withTransaction(this.pool, async client => {
+      await lockRelay(client);
+      await this.checkAuthorityAndContext(client, bindingId, id, authorize);
+      if ((this.verified.get(cacheKey) ?? 0) > Date.now()) return false;
+      if (!await reserveVerification(client, bindingId)) throw new EventError(-32015, 'verification_budget_exceeded');
+      return true;
+    });
+    // The reservation is durable and the ordering lock is released before HTTP.
+    // Failures and process exits spend the reservation; no automatic refund.
+    if (needsVerification) await this.verifyCallback(id, params.delivery.url, params.delivery.secret, cacheKey);
     // This pilot always grants finite lifetimes, including requests for no expiry.
     const ttlMs = Math.min(params.ttlMs ?? this.options.defaultTtlMs ?? 3_600_000, 86_400_000);
     return withTransaction(this.pool, async client => {
       await lockRelay(client);
       // Callback verification awaits external HTTP. Revalidate the original caller
       // under the same ordering barrier used by revocation before committing.
-      const authority = authorize ? await authorize(client) : {};
-      const binding = await client.query('SELECT id FROM bindings WHERE id=$1 AND active=true AND provider=\'dots\' FOR UPDATE', [bindingId]);
-      if (!binding.rowCount) throw new EventError(-32001, 'binding_unavailable');
-      await client.query(`UPDATE event_subscriptions s SET active=false,updated_at=now()
-        WHERE binding_id=$1 AND active AND (
-          expires_at<=clock_timestamp() OR (oauth_family_id IS NOT NULL AND EXISTS (
-            SELECT 1 FROM oauth_families f WHERE f.id=s.oauth_family_id
-              AND (f.revoked OR f.expires_at<=clock_timestamp())
-          ))
-        )`, [bindingId]);
-      const other = await client.query('SELECT id FROM event_subscriptions WHERE binding_id=$1 AND active AND id<>$2', [bindingId, id]);
-      if (other.rowCount) throw new EventError(-32602, 'subscription_context_already_bound');
+      const authority = await this.checkAuthorityAndContext(client, bindingId, id, authorize);
       const existing = await client.query<{ secret_encrypted: string; previous_secret_encrypted: string | null; rotation_until: Date | null }>('SELECT secret_encrypted,previous_secret_encrypted,rotation_until FROM event_subscriptions WHERE id=$1', [id]);
       const previous = existing.rows[0]?.secret_encrypted;
       const rotated = previous && decryptSecret(previous, this.options.encryptionKey, id) !== params.delivery.secret;
@@ -91,10 +89,23 @@ export class EventSubscriptions {
     });
   }
 
-  private async verifyCallback(bindingId: string, id: string, url: string, secret: string): Promise<void> {
-    const cacheKey = createHash('sha256').update(canonicalJson([bindingId, url, secret])).digest('hex');
-    const cachedUntil = this.verified.get(cacheKey);
-    if (cachedUntil !== undefined && cachedUntil > Date.now()) return;
+  private async checkAuthorityAndContext(client: PoolClient, bindingId: string, id: string, authorize?: EventAuthorization) {
+    const authority = authorize ? await authorize(client) : {};
+    const binding = await client.query('SELECT id FROM bindings WHERE id=$1 AND active=true AND provider=\'dots\' FOR UPDATE', [bindingId]);
+    if (!binding.rowCount) throw new EventError(-32001, 'binding_unavailable');
+    await client.query(`UPDATE event_subscriptions s SET active=false,updated_at=now()
+      WHERE binding_id=$1 AND active AND (
+        expires_at<=clock_timestamp() OR (oauth_family_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM oauth_families f WHERE f.id=s.oauth_family_id
+            AND (f.revoked OR f.expires_at<=clock_timestamp())
+        ))
+      )`, [bindingId]);
+    const other = await client.query('SELECT id FROM event_subscriptions WHERE binding_id=$1 AND active AND id<>$2', [bindingId, id]);
+    if (other.rowCount) throw new EventError(-32602, 'subscription_context_already_bound');
+    return authority;
+  }
+
+  private async verifyCallback(id: string, url: string, secret: string, cacheKey: string): Promise<void> {
     const challenge = randomBytes(32).toString('base64url');
     const body = JSON.stringify({ type: 'verification', challenge });
     try {

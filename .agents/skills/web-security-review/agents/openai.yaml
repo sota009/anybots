@@ -1,0 +1,4 @@
+interface:
+  display_name: "Web Security Review"
+  short_description: "Evidence-based web security design and regression review"
+  default_prompt: "Use $web-security-review to review this application, reproduce relevant security gaps, and record verified fixes and remaining risks."
