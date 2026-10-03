@@ -67,6 +67,8 @@ API作成後に発行されたURLを確認し、APIとworkerの両方に`ALLOWED
 
 通知を有効にする際は、APIとworkerで同じ`NOTIFICATION_ENCRYPTION_KEY`を使います。値は32バイトの乱数を16進表記したものとし、再起動のたびに作り直しません。`WEBHOOK_ALLOWED_HOSTS`には確認済みの通知先ホストだけを登録します。
 
+2026年10月3日の実アカウント検証では、ChatGPTが指定した`connectors.api.openai.com`を確認しました。この環境のAPIとworkerには`WEBHOOK_ALLOWED_HOSTS=api2.cursor.sh,connectors.api.openai.com`を設定します。ホスト確認の根拠は[通知先の診断](callback-diagnostics.md)に記録しています。他の環境で同じ通知先になるとは仮定せず、実際の要求を確認してください。
+
 GrokのWebhookは引き続き実験扱いです。発行されたURLとキーを秘密ファイルへ保存し、`GROK_CONFIG_FILE`で参照します。実際のOAuth接続と通信許可を確認した後で、`GROK_EXPERIMENTAL`を有効にします。dotsの通知先は購読時に提供されるため、利用者に通知URLをチャットへ貼ってもらう手順にはしません。
 
 ## 完了条件

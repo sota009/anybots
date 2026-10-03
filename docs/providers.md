@@ -72,7 +72,10 @@ user reported successful authentication and recognition of Anybots and
 `inbox.ready` in the intended dot. Two callback-verification reservations were
 then observed in production, with no stored subscription. The remaining failure
 is in subscription setup; the task service hides its details behind an unexpected
-error. API diagnostics must establish the reason before changing configuration.
+error. A subsequent authenticated attempt at 21:50:25Z established
+`callback_host_not_allowed` for `connectors.api.openai.com`. The exact host was
+reviewed and added to both service allowlists; see [callback diagnostics](callback-diagnostics.md)
+for the evidence. The signed challenge and live subscription still need verification.
 
 The public Events documentation uses an example receiver hostname and does not
 publish a production callback hostname. The exact hostname must be observed from
