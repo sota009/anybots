@@ -1,12 +1,17 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OAuthPilot } from '../src/oauth.js';
 import { Relay } from '../src/relay.js';
 import { testDatabase } from './helpers.js';
 
 const issuer = 'https://relay.example.test';
 const redirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
+const cursorRedirect = 'cursor://anysphere.cursor-mcp/oauth/callback';
+const attributeRedirect = "https://callback.example.test/agent's/callback?label=%22%3E%3Cscript%3E&mode=connect";
+const browserPolicy = "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+const unescapeAttribute = (value: string) => value.replace(/&(amp|lt|gt|quot|#39);/g,
+  entity => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" })[entity]!);
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 describe('pilot OAuth authorization code + PKCE over real Postgres', () => {
   let db: Awaited<ReturnType<typeof testDatabase>>;
@@ -17,12 +22,16 @@ describe('pilot OAuth authorization code + PKCE over real Postgres', () => {
   let clientId: string;
   beforeAll(async () => {
     db = await testDatabase(); relay = new Relay(db.pool);
-    oauth = new OAuthPilot(db.pool, { issuer, redirectUris: [redirect, 'cursor://anysphere.cursor-mcp/oauth/callback'] });
+    oauth = new OAuthPilot(db.pool, { issuer, redirectUris: [redirect, cursorRedirect, attributeRedirect] });
     app = Fastify(); oauth.register(app); await app.ready();
   });
   afterAll(async () => { await app?.close(); await db?.close(); });
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(async () => {
     await db.pool.query('TRUNCATE oauth_rates,oauth_pending,oauth_pairings,oauth_codes,oauth_tokens,oauth_families,oauth_clients CASCADE');
+    // Keep the registration minute bucket stable; database clocks and timers
+    // stay real so expiration and advisory-lock wait tests retain their coverage.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now());
     binding = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'dots' });
     const registration = await app.inject({ method: 'POST', url: '/oauth/register', payload: { redirect_uris: [redirect], client_name: '<script>malicious()</script>', token_endpoint_auth_method: 'none' } });
     expect(registration.statusCode).toBe(201); clientId = registration.json().client_id;
@@ -43,11 +52,26 @@ describe('pilot OAuth authorization code + PKCE over real Postgres', () => {
   }
   async function authorize() {
     const flow = await begin(); const response = await consent(flow);
-    expect(response.statusCode).toBe(303);
-    const location = new URL(String(response.headers.location));
+    const location = handoff(response);
+    expect(`${location.origin}${location.pathname}`).toBe(redirect);
     expect(location.searchParams.get('state')).toBe(flow.query.state);
     expect(location.searchParams.get('iss')).toBe(issuer);
     return { ...flow, code: location.searchParams.get('code')! };
+  }
+  function handoff(response: Awaited<ReturnType<typeof consent>>) {
+    expect(response.statusCode).toBe(200);
+    expect(response.headers.location).toBeUndefined();
+    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['referrer-policy']).toBe('no-referrer');
+    expect(response.headers['content-security-policy']).toBe(browserPolicy);
+    expect(response.headers['set-cookie']).toContain('Max-Age=0');
+    expect(response.body).not.toMatch(/<form|<script|name="pairing_code"/);
+    const link = response.body.match(/<a href="([^"]+)">Return to your agent<\/a>/)?.[1];
+    const refresh = response.body.match(/<meta http-equiv="refresh" content="0;url=([^"]+)">/)?.[1];
+    expect(link).toBeTruthy();
+    expect(refresh).toBe(link);
+    return new URL(unescapeAttribute(link!));
   }
   function exchange(code: string, verifier: string, overrides: Record<string, string> = {}) {
     return app.inject({ method: 'POST', url: '/oauth/token', headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -73,8 +97,7 @@ describe('pilot OAuth authorization code + PKCE over real Postgres', () => {
     expect(flow.response.body).toContain('name="viewport"');
     expect(flow.response.body).toContain('&lt;script&gt;malicious()&lt;/script&gt;');
     expect(flow.response.body).not.toContain('<script>');
-    expect(flow.response.headers['content-security-policy']).toContain("frame-ancestors 'none'");
-    expect(flow.response.headers['content-security-policy']).toContain("form-action 'self' https://chatgpt.com");
+    expect(flow.response.headers['content-security-policy']).toBe(browserPolicy);
     expect(flow.response.headers['referrer-policy']).toBe('same-origin');
     expect(flow.response.headers['cache-control']).toBe('no-store');
     expect(flow.response.headers['set-cookie']).toContain('HttpOnly; SameSite=Lax');
@@ -82,13 +105,36 @@ describe('pilot OAuth authorization code + PKCE over real Postgres', () => {
     const pairing = await oauth.issuePairingCode(binding.bindingId);
     expect((await consent(flow, pairing.pairingCode, 'anybots_oauth=wrong')).statusCode).toBe(400);
     const response = await consent(flow, pairing.pairingCode);
-    expect(response.statusCode).toBe(303);
+    handoff(response);
+    expect(response.body).not.toContain(pairing.pairingCode);
+    expect(response.body).not.toContain(flow.formToken);
     expect((await consent(flow, pairing.pairingCode)).statusCode).toBe(400);
     const other = await begin();
     expect((await consent(other, pairing.pairingCode)).statusCode).toBe(400);
     const saved = (await db.pool.query('SELECT hash FROM oauth_pairings')).rows[0].hash;
     expect(saved).toBe(sha(pairing.pairingCode));
     expect(JSON.stringify((await db.pool.query('SELECT * FROM oauth_pending')).rows)).not.toContain(flow.formToken);
+  });
+  it.each([cursorRedirect, attributeRedirect])('hands off only to the validated callback with escaped attributes: %s', async callback => {
+    const registration = await app.inject({ method: 'POST', url: '/oauth/register', payload: { redirect_uris: [callback] } });
+    expect(registration.statusCode).toBe(201);
+    const state = '\"><script>alert(1)</script>&next=https://evil.test/';
+    const flow = await begin({ client_id: registration.json().client_id, redirect_uri: callback, state });
+    expect(flow.response.statusCode).toBe(200);
+    expect(flow.response.headers['content-security-policy']).toBe(browserPolicy);
+    const response = await consent(flow);
+    const location = handoff(response);
+    const expected = new URL(callback);
+    expected.searchParams.set('code', location.searchParams.get('code')!);
+    expected.searchParams.set('state', state);
+    expected.searchParams.set('iss', issuer);
+    expect(location.href).toBe(expected.href);
+    expect(location.searchParams.get('code')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(response.body).not.toContain(state);
+    expect(response.body).toContain('&amp;state=');
+    if (callback === attributeRedirect) expect(response.body).toContain('agent&#39;s/callback');
+    expect((await exchange(location.searchParams.get('code')!, flow.verifier,
+      { client_id: registration.json().client_id, redirect_uri: callback })).statusCode).toBe(200);
   });
   it('rejects wrong PKCE, redirect, resource, client, and code replay; successful tokens have expiry and scope', async () => {
     const flow = await authorize();

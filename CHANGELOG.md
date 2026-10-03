@@ -1,3 +1,9 @@
+## 0.1.6
+
+- Complete browser consent with a non-cacheable handoff page before navigating to the exact callback, so provider login redirects are not blocked by form-action CSP.
+- Keep strict same-origin form submissions, escaped callback attributes, PKCE, one-time codes, and no-referrer navigation; provide a visible return link.
+- Add callback escaping and handoff regressions; real-provider connection remains a separate acceptance check.
+
 # Changelog
 
 ## 0.1.5
