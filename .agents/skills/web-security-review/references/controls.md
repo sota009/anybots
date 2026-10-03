@@ -27,6 +27,7 @@ Malcolm McDonald『実践理解！Webアプリケーションセキュリティ�
 - [OWASP SSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)。宛先が限定できる用途と任意URLを扱う用途を分けます。
 - [OWASP API4:2023](https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/)。件数、時間、容量、外部サービスの利用費用を含めます。
 - [OWASP HTTP Headers](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html)。CSPやフレーム制限はHTMLの用途に合わせます。
+- [MDN Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie)。HttpOnlyがJavaScriptからのCookie読み取りを禁止することを確認します。
 - [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)。OAuthの現行セキュリティ指針としてPKCE、リダイレクト、トークン再使用対策を確認します。
 
 書籍78頁のCSPとCookieへのアクセス制限の説明は、実装時に区別します。JavaScriptからのCookie読み取りを禁止するのはHttpOnlyで、CSPだけでは代用できません。また、書籍の暗号例を理由に、認証付き暗号化を弱い方式へ置き換えません。
