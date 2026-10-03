@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { NotificationDispatcher, DeliveryResult } from './providers/index.js';
+import { DEFAULT_NOTIFICATION_BUDGET, validateNotificationBudget, type NotificationBudget } from './notification-budget.js';
 
 const MAX_ATTEMPTS = 3;
-const DAILY_NOTIFICATION_BUDGET = 20;
-const MONTHLY_NOTIFICATION_BUDGET = 100;
 const LOCK_KEY = 718401;
 
 /** Calendar windows use the DB timestamp and UTC, independent of host timezone. */
@@ -24,7 +23,8 @@ export function notificationBudgetWindows(at: Date) {
  * Every dispatcher process and relay mutation must share this DB lock.
  * This is a bounded, low-throughput pilot; it is not remote execution fencing.
  */
-export async function dispatchOne(pool: Pool, dispatcher: NotificationDispatcher): Promise<boolean> {
+export async function dispatchOne(pool: Pool, dispatcher: NotificationDispatcher, budget: NotificationBudget = DEFAULT_NOTIFICATION_BUDGET): Promise<boolean> {
+  const limits = validateNotificationBudget(budget);
   const client = await pool.connect();
   const abort = new AbortController();
   const lost = () => abort.abort();
@@ -56,11 +56,11 @@ export async function dispatchOne(pool: Pool, dispatcher: NotificationDispatcher
       await client.query('COMMIT'); inTransaction = false; return true;
     }
     const window = notificationBudgetWindows(row.attempt_at);
-    const budget = (await client.query<{ day_count: string; month_count: string }>(
+    const usage = (await client.query<{ day_count: string; month_count: string }>(
       `SELECT count(*) FILTER(WHERE started_at >= $1 AND started_at < $2) AS day_count,
          count(*) AS month_count FROM delivery_attempts WHERE started_at >= $3 AND started_at < $4`,
       [window.dayStart, window.dayEnd, window.monthStart, window.monthEnd])).rows[0]!;
-    if (Number(budget.day_count) >= DAILY_NOTIFICATION_BUDGET || Number(budget.month_count) >= MONTHLY_NOTIFICATION_BUDGET) {
+    if (Number(usage.day_count) >= limits.daily || Number(usage.month_count) >= limits.monthly) {
       // Terminal: a budget rejection must not silently wake the AI tomorrow.
       // No attempt is charged because the dispatcher will not be called.
       await client.query("UPDATE outbox SET status='failed',last_error='budget_exceeded',updated_at=now() WHERE id=$1", [row.id]);

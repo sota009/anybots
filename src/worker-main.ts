@@ -3,10 +3,12 @@ import pg from 'pg';
 import { notificationOptions } from './config.js';
 import { ProviderDispatcher } from './providers/index.js';
 import { dispatchOne } from './worker.js';
+import { notificationBudgetOptions } from './notification-budget.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 if (process.env.NOTIFICATIONS_ENABLED !== 'true') throw new Error('NOTIFICATIONS_ENABLED must explicitly enable outbound dispatch');
 const options = await notificationOptions();
+const budget = notificationBudgetOptions();
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const dispatcher = new ProviderDispatcher(pool, options);
 let stopping = false;
@@ -15,7 +17,7 @@ process.once('SIGTERM', () => { stopping = true; });
 try {
   while (!stopping) {
     try {
-      const processed = await dispatchOne(pool, dispatcher);
+      const processed = await dispatchOne(pool, dispatcher, budget);
       if (!processed) await wait(1000);
     } catch {
       // Never log provider payloads, URLs, authorization, or database errors.
