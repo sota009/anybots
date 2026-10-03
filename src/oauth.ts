@@ -20,7 +20,7 @@ const scalar = z.string().min(1).max(2048);
 interface Pending { client_id: string; redirect_uri: string; resource: string; state: string; scope: string; challenge: string; cookie_hash: string; attempts: number }
 interface Code extends Pending { binding_id: string; consumed: boolean; family_id: string | null }
 interface Family { id: string; binding_id: string; client_id: string; resource: string; scope: string; expires_at: Date; revoked: boolean }
-export interface OAuthOptions { issuer: string; redirectUris: string[]; allowInsecureLocalhost?: boolean }
+export interface OAuthOptions { issuer: string; redirectUris: string[]; allowInsecureLocalhost?: boolean; allowNativeLoopback?: boolean }
 
 /** Deliberately bounded operator-provisioned pilot, not a general identity provider. */
 export class OAuthPilot {
@@ -29,6 +29,7 @@ export class OAuthPilot {
   readonly resourceMetadataUrl: string;
   private readonly secure: boolean;
   private readonly redirects: Set<string>;
+  private readonly allowNativeLoopback: boolean;
   constructor(private readonly pool: Pool, options: OAuthOptions) {
     const issuer = new URL(options.issuer);
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(issuer.hostname);
@@ -38,6 +39,7 @@ export class OAuthPilot {
     this.resource = `${this.issuer}/mcp`;
     this.resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(new URL(this.resource));
     this.secure = issuer.protocol === 'https:';
+    this.allowNativeLoopback = options.allowNativeLoopback ?? false;
     if (!options.redirectUris.length || options.redirectUris.length > 4) throw new Error('Exact OAuth redirect allowlist required');
     this.redirects = new Set(options.redirectUris.map(value => {
       const url = new URL(value);
@@ -46,6 +48,13 @@ export class OAuthPilot {
         !(url.protocol === 'http:' && loopback) && value !== 'cursor://anysphere.cursor-mcp/oauth/callback')) throw new Error('Unsafe OAuth redirect');
       return value;
     }));
+  }
+  private redirectIdentity(uri: string): string | undefined {
+    // Match the raw spelling before URL parsing can normalize aliases. Only the
+    // OS-selected listener port varies; web callbacks retain exact matching.
+    const native = this.allowNativeLoopback && uri.match(/^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})\/callback$/);
+    if (native && native[0] === uri && Number(native[1]) <= 65535) return 'http://127.0.0.1/callback';
+    return this.redirects.has(uri) ? uri : undefined;
   }
   metadata() {
     return {
@@ -173,13 +182,15 @@ export class OAuthPilot {
     const data = parse(z.object({ redirect_uris: z.array(z.string().max(2048)).min(1).max(10), client_name: z.string().min(1).max(100).default('Agent client'),
       token_endpoint_auth_method: z.literal('none').default('none'), grant_types: z.array(z.enum(['authorization_code', 'refresh_token'])).default(['authorization_code', 'refresh_token']),
       response_types: z.array(z.literal('code')).default(['code']), scope: z.literal(scope).optional() }).passthrough(), input);
-    if (data.redirect_uris.some(uri => !this.redirects.has(uri))) throw new Failure('invalid_redirect_uri');
     const redirectUris = [...new Set(data.redirect_uris)].sort();
+    const identities = redirectUris.map(uri => this.redirectIdentity(uri));
+    if (identities.some(uri => uri === undefined)) throw new Failure('invalid_redirect_uri');
+    const registeredUris = [...new Set(identities)].sort();
     return this.tx(async client => {
-      const existing = await client.query<{ id: string; name: string }>('SELECT id,name FROM oauth_clients WHERE redirect_uris=$1::jsonb', [JSON.stringify(redirectUris)]);
-      if (!existing.rowCount && (await client.query('SELECT count(*)::int AS n FROM oauth_clients')).rows[0].n >= 30) throw new Failure('temporarily_unavailable', 503);
+      const existing = await client.query<{ id: string; name: string }>('SELECT id,name FROM oauth_clients WHERE redirect_uris=$1::jsonb', [JSON.stringify(registeredUris)]);
+      if (!existing.rowCount && (await client.query('SELECT count(*)::int AS n FROM oauth_clients')).rows[0].n >= 32) throw new Failure('temporarily_unavailable', 503);
       const clientId = existing.rows[0]?.id ?? opaque();
-      if (!existing.rowCount) await client.query('INSERT INTO oauth_clients(id,redirect_uris,name) VALUES($1,$2,$3)', [clientId, JSON.stringify(redirectUris), data.client_name]);
+      if (!existing.rowCount) await client.query('INSERT INTO oauth_clients(id,redirect_uris,name) VALUES($1,$2,$3)', [clientId, JSON.stringify(registeredUris), data.client_name]);
       return { client_id: clientId, client_id_issued_at: Math.floor(Date.now() / 1000), redirect_uris: redirectUris, client_name: existing.rows[0]?.name ?? data.client_name,
         token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], scope };
     });
@@ -189,7 +200,8 @@ export class OAuthPilot {
       scope: z.literal(scope).default(scope), state: z.string().min(1).max(1024), code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), code_challenge_method: z.literal('S256') }).passthrough(), input);
     return this.tx(async client => {
       const found = await client.query<{ name: string; redirect_uris: string[] }>('SELECT name,redirect_uris FROM oauth_clients WHERE id=$1', [data.client_id]);
-      if (!found.rows[0] || !found.rows[0].redirect_uris.includes(data.redirect_uri) || !this.redirects.has(data.redirect_uri)) throw new Failure('invalid_request');
+      const identity = this.redirectIdentity(data.redirect_uri);
+      if (!found.rows[0] || identity === undefined || !found.rows[0].redirect_uris.includes(identity)) throw new Failure('invalid_request');
       if ((await client.query('SELECT count(*)::int AS n FROM oauth_pending')).rows[0].n >= 256) throw new Failure('temporarily_unavailable', 503);
       const formToken = opaque(), cookie = opaque();
       await client.query(`INSERT INTO oauth_pending(hash,cookie_hash,client_id,redirect_uri,resource,state,scope,challenge,expires_at)
@@ -203,7 +215,7 @@ export class OAuthPilot {
     return this.tx(async client => {
       const found = await client.query<Pending>('SELECT * FROM oauth_pending WHERE hash=$1 AND NOT consumed AND expires_at>clock_timestamp() FOR UPDATE', [hash(data.form_token)]);
       const pending = found.rows[0];
-      if (!pending || pending.resource !== this.resource || !this.redirects.has(pending.redirect_uri) || hash(cookie) !== pending.cookie_hash || pending.attempts >= 5) return new Failure('invalid_request');
+      if (!pending || pending.resource !== this.resource || this.redirectIdentity(pending.redirect_uri) === undefined || hash(cookie) !== pending.cookie_hash || pending.attempts >= 5) return new Failure('invalid_request');
       await client.query('UPDATE oauth_pending SET attempts=attempts+1 WHERE hash=$1', [hash(data.form_token)]);
       const pairing = await client.query<{ binding_id: string }>('SELECT p.binding_id FROM oauth_pairings p JOIN bindings b ON b.id=p.binding_id WHERE p.hash=$1 AND NOT p.consumed AND p.expires_at>clock_timestamp() AND b.active FOR UPDATE OF p', [hash(data.pairing_code)]);
       if (!pairing.rows[0]) return new Failure('access_denied');
@@ -228,7 +240,7 @@ export class OAuthPilot {
       if (data.grant_type === 'authorization_code') {
         const result = await client.query<Code>('SELECT c.* FROM oauth_codes c JOIN bindings b ON b.id=c.binding_id WHERE c.hash=$1 AND c.expires_at>clock_timestamp() AND b.active FOR UPDATE OF c', [hash(data.code)]);
         const code = result.rows[0];
-        if (!code || !this.redirects.has(data.redirect_uri) || code.client_id !== data.client_id || code.redirect_uri !== data.redirect_uri || code.resource !== data.resource || code.challenge !== createHash('sha256').update(data.code_verifier).digest('base64url')) return new Failure('invalid_grant');
+        if (!code || this.redirectIdentity(data.redirect_uri) === undefined || code.client_id !== data.client_id || code.redirect_uri !== data.redirect_uri || code.resource !== data.resource || code.challenge !== createHash('sha256').update(data.code_verifier).digest('base64url')) return new Failure('invalid_grant');
         if (code.consumed) {
           if (code.family_id) await client.query('UPDATE oauth_families SET revoked=true WHERE id=$1', [code.family_id]);
           return new Failure('invalid_grant');

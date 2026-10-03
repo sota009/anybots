@@ -6,6 +6,20 @@ our server and simulated callback behavior, not a live dots-to-Grok conversation
 
 ## dots
 
+Desktop authentication uses the Codex OAuth client. On 2026-10-03, the deployed
+server rejected its DCR request before displaying consent. With a local mock
+server advertising issuer identification exactly as Anybots does, installed
+Codex 0.160.0 sent `application_type: native`, `token_endpoint_auth_method: none`,
+`scope: relay`, and `http://127.0.0.1:<ephemeral-port>/callback`. The mock rejected
+registration intentionally, so this check neither authorized a provider nor
+saved credentials. [Codex MCP documentation](https://developers.openai.com/codex/mcp)
+requires loopback port variation; the relay exposes the explicit opt-in setting
+`OAUTH_ALLOW_NATIVE_LOOPBACK=true` for this desktop flow. Only the port varies.
+Other paths, hosts, and web callbacks do not inherit this exception. A local
+probe without issuer identification used a suffixed callback; that configuration
+does not match Anybots and is deliberately unsupported. Actual dots login and
+event delivery still require account-backed verification.
+
 [OpenAI MCP Events](https://developers.openai.com/plugins/build/mcp-events)
 explicitly supports dots and requires MCP 2.0 revision `2026-07-28`.
 Events and tools use the same authenticated MCP endpoint. The official SDK adds

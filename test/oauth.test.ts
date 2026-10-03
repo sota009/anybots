@@ -22,7 +22,7 @@ describe('pilot OAuth authorization code + PKCE over real Postgres', () => {
   let clientId: string;
   beforeAll(async () => {
     db = await testDatabase(); relay = new Relay(db.pool);
-    oauth = new OAuthPilot(db.pool, { issuer, redirectUris: [redirect, cursorRedirect, attributeRedirect] });
+    oauth = new OAuthPilot(db.pool, { issuer, redirectUris: [redirect, cursorRedirect, attributeRedirect], allowNativeLoopback: true });
     app = Fastify(); oauth.register(app); await app.ready();
   });
   afterAll(async () => { await app?.close(); await db?.close(); });
@@ -90,6 +90,65 @@ describe('pilot OAuth authorization code + PKCE over real Postgres', () => {
     expect(() => new OAuthPilot(db.pool, { issuer: 'http://public.example', redirectUris: [redirect] })).toThrow();
     expect(() => new OAuthPilot(db.pool, { issuer: 'http://localhost:3000', redirectUris: [redirect] })).toThrow();
     expect(() => new OAuthPilot(db.pool, { issuer: 'http://localhost:3000', redirectUris: [redirect], allowInsecureLocalhost: true })).not.toThrow();
+  });
+  it('reuses one native client across listener ports but binds the code to its actual authorization redirect', async () => {
+    let nativeClient = '';
+    for (const port of [34567, 45678, 56789]) {
+      const callback = `http://127.0.0.1:${port}/callback`;
+      const registered = await app.inject({ method: 'POST', url: '/oauth/register', payload: {
+        redirect_uris: [callback], client_name: 'Codex', application_type: 'native', token_endpoint_auth_method: 'none', scope: 'relay',
+      } });
+      expect(registered.statusCode).toBe(201);
+      expect(registered.json().redirect_uris).toEqual([callback]);
+      nativeClient ||= registered.json().client_id;
+      expect(registered.json().client_id).toBe(nativeClient);
+    }
+    const duplicatedPorts = ['http://127.0.0.1:34567/callback', 'http://127.0.0.1:45678/callback'];
+    const combined = await app.inject({ method: 'POST', url: '/oauth/register', payload: { redirect_uris: duplicatedPorts } });
+    expect(combined.statusCode).toBe(201);
+    expect(combined.json().client_id).toBe(nativeClient);
+    expect(combined.json().redirect_uris).toEqual(duplicatedPorts);
+    expect((await db.pool.query('SELECT redirect_uris FROM oauth_clients WHERE id=$1', [nativeClient])).rows[0].redirect_uris).toEqual(['http://127.0.0.1/callback']);
+    expect((await db.pool.query('SELECT count(*)::int AS n FROM oauth_clients')).rows[0].n).toBe(2);
+    // A later login may select another port without creating another client.
+    const callback = 'http://127.0.0.1:60001/callback';
+    const flow = await begin({ client_id: nativeClient, redirect_uri: callback });
+    expect(flow.response.statusCode).toBe(200);
+    const location = handoff(await consent(flow));
+    expect(`${location.origin}${location.pathname}`).toBe(callback);
+    expect(location.searchParams.get('state')).toBe(flow.query.state);
+    expect(location.searchParams.get('iss')).toBe(issuer);
+    const code = location.searchParams.get('code')!;
+    expect((await exchange(code, flow.verifier, { client_id: nativeClient, redirect_uri: 'http://127.0.0.1:60002/callback' })).json().error).toBe('invalid_grant');
+    expect((await exchange(code, flow.verifier, { client_id: nativeClient, redirect_uri: callback })).statusCode).toBe(200);
+    expect((await begin({ client_id: clientId, redirect_uri: callback })).response.statusCode).toBe(400);
+    expect((await begin({ client_id: nativeClient, redirect_uri: redirect })).response.statusCode).toBe(400);
+  });
+  it('keeps native callbacks disabled unless explicitly opted in', async () => {
+    const closed = Fastify();
+    new OAuthPilot(db.pool, { issuer, redirectUris: [redirect] }).register(closed);
+    try {
+      const response = await closed.inject({ method: 'POST', url: '/oauth/register', payload: { redirect_uris: ['http://127.0.0.1:34567/callback'] } });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toBe('invalid_redirect_uri');
+    } finally { await closed.close(); }
+  });
+  it.each([
+    'http://localhost:34567/callback', 'http://127.0.0.2:34567/callback', 'http://[::1]:34567/callback',
+    'https://127.0.0.1:34567/callback', 'http://127.0.0.1.evil.test:34567/callback',
+    'http://127.0.0.1:34567/other', 'http://127.0.0.1:34567/callback/server-id', 'http://127.0.0.1:34567/callback/',
+    'http://127.0.0.1:34567/callback?x=1', 'http://127.0.0.1:34567/callback#fragment',
+    'http://user:pass@127.0.0.1:34567/callback', 'http://127.0.0.1:34567/%63allback',
+    'http://127.0.0.1:34567/a/../callback', 'http://127.1:34567/callback', 'http://2130706433:34567/callback',
+    'http://%31%32%37.0.0.1:34567/callback', 'http://127.0.0.1:0/callback', 'http://127.0.0.1:65536/callback',
+    'http://127.0.0.1:034567/callback', 'http://127.0.0.1/callback', 'http://127.0.0.1:34567/callback\n',
+  ])('rejects unapproved native callback spelling at registration and authorization: %s', async callback => {
+    const registered = await app.inject({ method: 'POST', url: '/oauth/register', payload: { redirect_uris: ['http://127.0.0.1:34567/callback'] } });
+    expect(registered.statusCode).toBe(201);
+    const rejected = await app.inject({ method: 'POST', url: '/oauth/register', payload: { redirect_uris: [callback] } });
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json().error).toBe('invalid_redirect_uri');
+    expect((await begin({ client_id: registered.json().client_id, redirect_uri: callback })).response.statusCode).toBe(400);
   });
   it('binds escaped consent to secure cookie and one-use form, and stores only credential hashes', async () => {
     const flow = await begin();
