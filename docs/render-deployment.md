@@ -71,6 +71,8 @@ API作成後に発行されたURLを確認し、APIとworkerの両方に`ALLOWED
 
 GrokのWebhookは引き続き実験扱いです。発行されたURLとキーを秘密ファイルへ保存し、`GROK_CONFIG_FILE`で参照します。実際のOAuth接続と通信許可を確認した後で、`GROK_EXPERIMENTAL`を有効にします。dotsの通知先は購読時に提供されるため、利用者に通知URLをチャットへ貼ってもらう手順にはしません。
 
+この環境では、利用者が保存したGrok用のJSONを、APIとworkerそれぞれのRender Secret File `grok-webhook.json`に登録します。`GROK_CONFIG_FILE=/etc/secrets/grok-webhook.json`と`GROK_EXPERIMENTAL=true`を設定し、両方を再デプロイします。登録前に対象の接続ID、通知先のホストとパス、キーの形式を検査します。値をチャットやGitへ出力せず、登録後は内容の一致と稼働中の設定を確認します。設定済みの表示だけでは、Grokが通知を受理したことや、自動返信できたことを証明しません。
+
 ## 完了条件
 
 公開URLの`/health`が成功しても、AI同士の連携が完了したとは扱いません。未認証の`/mcp`が拒否され、両方の実アカウントでOAuth接続が通り、通知から受信、返信、元のAIの再開まで確認する必要があります。
