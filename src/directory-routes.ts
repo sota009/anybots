@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { z } from 'zod';
 import { DirectoryAdmission, DirectoryRateLimit } from './directory-rate-limit.js';
 import { DirectoryError, listConnections, newRequestId } from './directory-inventory.js';
+import { registerDirectoryUi } from './directory-ui.js';
 
 export interface DirectoryRouteOptions {
   pool: Pool;
@@ -38,6 +39,7 @@ export function registerDirectoryRoutes(app: FastifyInstance, options: Directory
   const rateLimit = options.rateLimit ?? new DirectoryRateLimit();
   const admission = options.admission ?? new DirectoryAdmission();
   const handlerTimeoutMs = options.handlerTimeoutMs ?? 3_000;
+  registerDirectoryUi(app);
 
   app.get('/v1/me/connections', async (request: FastifyRequest, reply: FastifyReply) => {
     reply.header('cache-control', 'no-store');
