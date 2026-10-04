@@ -1,3 +1,9 @@
+## 0.1.9
+
+- Add a same-origin read-only Connections Web UI at `/directory`, gated by the existing directory feature flag.
+- Reuse `GET /v1/me/connections` with sessionStorage-held directory secrets, strict CSP, and no CORS.
+- Document UI design sources from current ChatGPT, Claude, and Manus references while avoiding cream/terracotta clichés.
+
 ## 0.1.8
 
 - Record the owner connection-directory design: normalized owners, dedicated `directory:read` credentials, default-disabled inventory API, and macOS CLI contract.
