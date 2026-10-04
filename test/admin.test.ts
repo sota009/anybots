@@ -3,56 +3,52 @@ import { chmod, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { admin } from '../src/admin.js';
-import { DirectoryRegistry } from '../src/directory.js';
+import { Accounts } from '../src/accounts.js';
 import { Relay } from '../src/relay.js';
-import { createOwner, testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
+const origin = 'https://app.example.test';
 let db: Awaited<ReturnType<typeof testDatabase>>;
 let directory: string;
-let registry: DirectoryRegistry;
+let relay: Relay;
+let accounts: Accounts;
 beforeAll(async () => {
   db = await testDatabase();
   directory = await mkdtemp(join(tmpdir(), 'anybots-admin-'));
   await chmod(directory, 0o700);
-  registry = new DirectoryRegistry(db.pool);
+  relay = new Relay(db.pool);
+  accounts = new Accounts(db.pool, { origin });
 });
 afterAll(async () => { await db?.close(); if (directory) await rm(directory, { recursive: true }); });
 
-it('writes operator credentials only to a private file, never the result', async () => {
-  const relay = new Relay(db.pool);
-  const ownerId = await createOwner(db.pool);
-  const result = await admin(relay, { action: 'provision', ownerId, runtimeScope: 'test-runtime', provider: 'dots' }, directory, undefined, undefined, registry);
-  expect(result).not.toHaveProperty('token');
-  if (!('credentialsFile' in result)) throw new Error('Expected provisioning result');
-  const credentials = JSON.parse(await readFile(result.credentialsFile, 'utf8'));
+it('writes a signup invite URL only to a private file, never the result', async () => {
+  const result = await admin({ relay, accounts, origin }, { action: 'signup_invite' }, directory);
+  if (!('credentialsFile' in result)) throw new Error('Expected an invite file');
   expect((await stat(result.credentialsFile)).mode & 0o777).toBe(0o600);
-  expect((await relay.authenticate(credentials.token)).id).toBe(result.bindingId);
-  await expect(admin(relay, { action: 'grant', a: credentials.bindingId, b: crypto.randomUUID(), consentConfirmed: false })).rejects.toThrow();
+  const saved = JSON.parse(await readFile(result.credentialsFile, 'utf8'));
+  const token = saved.url.match(/^https:\/\/app\.example\.test\/app#invite=([A-Za-z0-9_-]{43})$/)?.[1];
+  expect(token).toBeDefined();
+  expect(JSON.stringify(result)).not.toContain(token);
+  await expect(accounts.registerOptions({ invite: token, displayName: 'Ada' })).resolves.toHaveProperty('challengeId');
 });
 
-it('does not provision a binding when credential directory creation fails', async () => {
-  const relay = new Relay(db.pool);
+it('targets an existing owner for recovery and rejects unknown owners', async () => {
   const ownerId = await createOwner(db.pool);
-  const result = await admin(relay, { action: 'provision', ownerId, runtimeScope: ownerId, provider: 'dots' }, directory, undefined, undefined, registry);
-  if (!('credentialsFile' in result)) throw new Error('Expected provisioning result');
-  const failedOwner = await createOwner(db.pool);
-  await expect(admin(relay, { action: 'provision', ownerId: failedOwner, runtimeScope: 'failed-runtime', provider: 'grok' }, join(result.credentialsFile, 'invalid'), undefined, undefined, registry)).rejects.toThrow();
-  expect((await db.pool.query("SELECT 1 FROM bindings WHERE runtime_scope='failed-runtime'")).rowCount).toBe(0);
+  await expect(admin({ relay, accounts, origin }, { action: 'signup_invite', ownerId }, directory)).resolves.toHaveProperty('inviteId');
+  await expect(admin({ relay, accounts, origin }, { action: 'signup_invite', ownerId: crypto.randomUUID() }, directory)).rejects.toMatchObject({ code: 'not_found' });
+  await expect(admin({ relay }, { action: 'signup_invite' }, directory)).rejects.toThrow('APP_ORIGIN required');
 });
 
-it('issues directory credentials to a private file without printing the secret', async () => {
-  const relay = new Relay(db.pool);
-  const ownerId = (await admin(relay, { action: 'create_owner' }, directory, undefined, undefined, registry) as { ownerId: string }).ownerId;
-  const credentialsPath = join(directory, 'directory.json');
-  const result = await admin(relay, {
-    action: 'directory_issue',
-    ownerId,
-    audience: 'https://directory.example',
-    credentialsPath,
-  }, directory, undefined, undefined, registry);
-  expect(result).not.toHaveProperty('secret');
-  expect(result).toMatchObject({ status: 'active', credentialId: expect.any(String) });
-  const saved = JSON.parse(await readFile(credentialsPath, 'utf8'));
-  expect(saved.secret.length).toBeGreaterThanOrEqual(32);
-  expect(JSON.stringify(result)).not.toContain(saved.secret);
+it('keeps only emergency disable and revoke, and rejects removed manual onboarding', async () => {
+  const a = await provision(relay, db.pool, { provider: 'dots' });
+  const b = await provision(relay, db.pool, { provider: 'grok' });
+  await relay.grantPair(a.bindingId, b.bindingId);
+  expect(await admin({ relay }, { action: 'revoke', a: a.bindingId, b: b.bindingId })).toEqual({ status: 'revoked' });
+  expect((await relay.agentsList(a.token))).toEqual([]);
+  expect(await admin({ relay }, { action: 'disable', bindingId: a.bindingId })).toEqual({ status: 'disabled' });
+  await expect(relay.authenticate(a.token)).rejects.toMatchObject({ code: 'unauthorized' });
+  for (const removed of [{ action: 'create_owner' }, { action: 'grant', a: a.bindingId, b: b.bindingId, consentConfirmed: true },
+    { action: 'provision', ownerId: a.ownerId, runtimeScope: 'x', provider: 'dots' }, { action: 'connect', bindingId: b.bindingId }]) {
+    await expect(admin({ relay }, removed)).rejects.toThrow();
+  }
 });

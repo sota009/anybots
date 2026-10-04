@@ -14,10 +14,9 @@ const OUTPUT_LIMIT = 65_536;
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const uuid = z.string().regex(new RegExp(`^${UUID}$`));
 const commandSchema = z.union([
-  z.strictObject({ action: z.literal('provision'), ownerId: uuid, runtimeScope: z.string().min(1).max(200), provider: z.enum(['dots', 'grok', 'muse']) }),
-  z.strictObject({ action: z.literal('create_owner') }),
-  z.strictObject({ action: z.enum(['grant', 'revoke']), a: z.uuid(), b: z.uuid(), consentConfirmed: z.literal(true) }),
-  z.strictObject({ action: z.enum(['disable', 'connect']), bindingId: z.uuid() }),
+  z.strictObject({ action: z.literal('signup_invite'), ownerId: uuid.optional() }),
+  z.strictObject({ action: z.literal('revoke'), a: z.uuid(), b: z.uuid() }),
+  z.strictObject({ action: z.literal('disable'), bindingId: z.uuid() }),
   z.strictObject({ action: z.literal('status'), bindingId: z.uuid(), peerBindingId: z.uuid().optional() }),
 ]);
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -114,19 +113,12 @@ function ssh(config, remoteCommand, input, spawnImpl, timeoutMs) {
 function metadataFor(command, raw) {
   const value = JSON.parse(raw);
   if (command.action === 'status') return diagnosticSchema.parse(value);
-  if (command.action === 'create_owner') return z.strictObject({ ownerId: uuid }).parse(value);
-  if (!['provision', 'connect'].includes(command.action)) {
-    const status = { grant: 'granted', revoke: 'revoked', disable: 'disabled' }[command.action];
+  if (command.action !== 'signup_invite') {
+    const status = { revoke: 'revoked', disable: 'disabled' }[command.action];
     return z.strictObject({ status: z.literal(status) }).parse(value);
   }
-  const fields = { bindingId: uuid, credentialsFile: z.string().max(200) };
-  if (command.action === 'provision') fields.ownerId = uuid;
-  if (command.action === 'connect') fields.expiresAt = z.iso.datetime();
-  const metadata = z.strictObject(fields).parse(value);
-  const suffix = command.action === 'connect' ? `-connect-${UUID}` : '';
-  if (!new RegExp(`^/app/\\.local/${metadata.bindingId}${suffix}\\.json$`).test(metadata.credentialsFile)) throw new Error(FAILURE);
-  if (command.action === 'connect' && metadata.bindingId !== command.bindingId.toLowerCase()) throw new Error(FAILURE);
-  if (command.action === 'provision' && metadata.ownerId !== command.ownerId.toLowerCase()) throw new Error(FAILURE);
+  const metadata = z.strictObject({ inviteId: uuid, credentialsFile: z.string().max(200), expiresAt: z.iso.datetime() }).parse(value);
+  if (metadata.credentialsFile !== `/app/.local/invite-${metadata.inviteId}.json`) throw new Error(FAILURE);
   return metadata;
 }
 
