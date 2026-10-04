@@ -1,8 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 
-// Pilot-wide ordering barrier. Dispatchers must hold this through bounded HTTP
-// send initiation/completion so a committed stop always precedes later sends.
-// This favors correctness over throughput; partition before multi-tenant scale.
+// Service-wide ordering barrier for short transactions only. Never hold it
+// across network I/O; partition before multi-tenant scale.
 export async function lockRelay(client: PoolClient): Promise<void> {
   await client.query('SELECT pg_advisory_xact_lock(718401)');
 }

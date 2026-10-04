@@ -4,6 +4,13 @@ import { Relay } from './relay.js';
 import { EventSubscriptions } from './events.js';
 import { notificationOptions } from './config.js';
 import { oauthFromEnvironment } from './oauth-config.js';
+import { Signals } from './signals.js';
+import { Dispatcher } from './dispatch.js';
+import { ProviderDispatcher } from './providers/index.js';
+import { notificationBudgetOptions } from './notification-budget.js';
+import { Accounts } from './accounts.js';
+import { Network } from './network.js';
+import { appOrigin } from './web.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL is required');
@@ -13,41 +20,43 @@ if (host !== '127.0.0.1' && host !== '::1' && !allowedHosts?.length) {
   throw new Error('ALLOWED_HOSTS is required when listening on a public interface');
 }
 const pool = new pg.Pool({ connectionString: databaseUrl });
-const notifications = process.env.NOTIFICATIONS_ENABLED === 'true' ? await notificationOptions() : undefined;
+const notifications = process.env.NOTIFICATIONS_ENABLED === 'true' ? notificationOptions() : undefined;
 const oauth = oauthFromEnvironment(pool);
-const directoryEnabled = process.env.DIRECTORY_ENABLED === 'true';
-let directory: { pool: pg.Pool; audience: string } | undefined;
-if (directoryEnabled) {
-  const audience = process.env.DIRECTORY_AUDIENCE;
-  if (!audience) throw new Error('DIRECTORY_AUDIENCE is required when DIRECTORY_ENABLED=true');
-  const parsed = new URL(audience);
-  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash
-    || (parsed.pathname !== '/' && parsed.pathname !== '')) {
-    throw new Error('DIRECTORY_AUDIENCE must be an https origin');
-  }
-  directory = {
-    audience: parsed.origin,
-    pool: new pg.Pool({
-      connectionString: databaseUrl,
-      max: 2,
-      connectionTimeoutMillis: 500,
-      allowExitOnIdle: true,
-    }),
-  };
-}
-const app = buildApp(new Relay(pool, oauth ? { oauthResource: oauth.resource } : {}), {
+const origin = appOrigin();
+if (origin && allowedHosts && !allowedHosts.includes(new URL(origin).hostname)) throw new Error('APP_ORIGIN must be one of ALLOWED_HOSTS');
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? '0');
+if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0 || trustProxyHops > 3) throw new Error('TRUST_PROXY_HOPS must be 0-3');
+const signals = new Signals(pool);
+await signals.start();
+const dispatcher = notifications ? new Dispatcher(pool, new ProviderDispatcher(pool, notifications), {
+  budget: notificationBudgetOptions(), signals,
+  // Never log provider payloads, URLs, authorization, or database errors.
+  onError: () => console.error('Notification dispatch unavailable; check database health.'),
+}) : undefined;
+const relay = new Relay(pool, { signals, ...(oauth ? { oauthResource: oauth.resource } : {}) });
+const web = origin ? {
+  origin, trustProxyHops, accounts: new Accounts(pool, { origin }),
+  network: new Network(pool, relay, {
+    mcpUrl: `${oauth?.issuer ?? origin}/mcp`,
+    ...(oauth ? { oauth } : {}),
+    ...(notifications ? { webhook: { encryptionKey: notifications.encryptionKey, hosts: notifications.webhookHosts ?? [] } } : {}),
+  }),
+} : undefined;
+const app = buildApp(relay, {
   onEventDiagnostic: diagnostic => console.log(JSON.stringify(diagnostic)),
   ...(allowedHosts ? { allowedHosts } : {}),
   ...(notifications ? { events: new EventSubscriptions(pool, notifications) } : {}),
   ...(oauth ? { oauth } : {}),
-  ...(directory ? { directory } : {}),
+  ...(web ? { web } : {}),
 });
 app.addHook('onClose', async () => {
+  await dispatcher?.stop();
+  await signals.stop();
   await pool.end();
-  if (directory) await directory.pool.end();
 });
 const shutdown = () => { void app.close().catch(() => { process.exitCode = 1; }); };
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 await app.listen({ host, port: Number(process.env.PORT ?? '3000') });
+dispatcher?.start();
 console.log('Anybots listening. Live provider verification is still required.');

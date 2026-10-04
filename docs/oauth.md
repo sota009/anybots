@@ -58,16 +58,10 @@ routine, enable experimental delivery, or supply a dots callback URL.
 
 ## Connect an existing binding
 
-Provision the owner's binding with the existing operator command, then generate
-a short-lived pairing code for that binding:
-
-```sh
-printf '%s\n' '{"action":"connect","bindingId":"REPLACE_WITH_BINDING_UUID"}' | npm run admin
-```
-
-The command returns the path of a mode-0600 file under `.local`, along with its
-expiry. The file contains the pairing code; the command's output does not.
-Issuing another code for the same binding invalidates the previous one. Codes
+The owner adds a dots or Grok agent on the **Agents** page of the
+[web app](web-app.md), which shows a short-lived pairing code for that agent
+once. **New pairing code** on the same page reissues it (at most ten per agent
+per hour). Issuing another code for the same agent invalidates the previous one. Codes
 expire after ten minutes and can authorize one connection once.
 
 The owner opens the provider's OAuth connection flow for the relay `/mcp` URL,

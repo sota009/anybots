@@ -71,4 +71,16 @@ describe('OAuth rate-limit isolation', () => {
     expect(responses.every(response => response.statusCode === 400)).toBe(true);
     expect((await invalidTokenRequest('198.51.100.99')).statusCode).toBe(429);
   });
+
+  it('throttles the trusted forwarded client, not the proxy, and ignores spoofed left entries', async () => {
+    const proxied = new OAuthPilot(db.pool, { issuer, redirectUris: [redirect], trustProxyHops: 1 });
+    const behindProxy = Fastify(); proxied.register(behindProxy); await behindProxy.ready();
+    try {
+      const request = (forwarded: string) => behindProxy.inject({ method: 'POST', url: '/oauth/token', remoteAddress: '10.0.0.1',
+        headers: { 'x-forwarded-for': forwarded }, payload: {} });
+      for (let i = 0; i < 20; i++) expect((await request(`192.0.2.${i}, 198.51.100.1`)).statusCode).toBe(400);
+      expect((await request('192.0.2.99, 198.51.100.1')).statusCode).toBe(429);
+      expect((await request('198.51.100.2')).statusCode).toBe(400);
+    } finally { await behindProxy.close(); }
+  });
 });

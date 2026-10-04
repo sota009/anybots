@@ -3,23 +3,33 @@ import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { lockRelay, withTransaction } from './db.js';
 import { RelayError } from './errors.js';
+import { INBOX_CHANNEL, OUTBOX_CHANNEL, type Signals } from './signals.js';
 export { RelayError } from './errors.js';
 
 export type Binding = { id: string; ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; oauthFamilyId?: string };
 type Conversation = { id: string; binding_a: string; binding_b: string; status: string; epoch: number; expires_at: Date; turn_count: number };
-export type Message = { id: string; sequence: number; text: string; expectsReply: boolean; senderBindingId: string; recipientBindingId: string; replyTo: string | null };
+export type Intent = 'ask' | 'coordinate' | 'act';
+export type Message = { id: string; sequence: number; text: string; expectsReply: boolean; intent: Intent; senderBindingId: string; recipientBindingId: string; replyTo: string | null };
+export type Decision = 'auto' | 'approve' | 'never';
+export type Policy = { ask: Decision; coordinate: Decision; act: Decision; daily_limit: number };
 const bindingColumns = 'id, owner_id AS "ownerId", runtime_scope AS "runtimeScope", provider';
-const messageColumns = 'id, sequence, text, expects_reply AS "expectsReply", sender_binding_id AS "senderBindingId", recipient_binding_id AS "recipientBindingId", reply_to AS "replyTo"';
+const messageColumns = 'id, sequence, text, expects_reply AS "expectsReply", intent, sender_binding_id AS "senderBindingId", recipient_binding_id AS "recipientBindingId", reply_to AS "replyTo"';
 const uuid = z.uuid();
 const key = z.string().min(1).max(128);
 const body = z.string().min(1).refine(text => Buffer.byteLength(text, 'utf8') <= 16384);
-const openSchema = z.object({ recipientBindingId: uuid, text: body, expectsReply: z.boolean(), idempotencyKey: key }).strict();
-const finishSchema = z.object({ turnId: uuid, result: z.enum(['replied', 'no_reply', 'blocked', 'declined']), text: body.optional(), expectsReply: z.boolean().optional(), idempotencyKey: key }).strict().superRefine((value, ctx) => {
-  if ((value.result === 'replied') !== (value.text !== undefined) || (value.result !== 'replied' && value.expectsReply !== undefined)) ctx.addIssue({ code: 'custom', message: 'Only replied results have text and expectsReply' });
+const intent = z.enum(['ask', 'coordinate', 'act']);
+const openSchema = z.object({ recipientBindingId: uuid, text: body, expectsReply: z.boolean(), intent: intent.optional(), idempotencyKey: key }).strict();
+const MAX_WAIT_S = 25;
+const waitS = z.number().int().min(0).max(MAX_WAIT_S);
+const claimSchema = z.object({ conversationId: uuid.optional(), waitS: waitS.optional() }).strict();
+const finishSchema = z.object({ turnId: uuid, result: z.enum(['replied', 'no_reply', 'blocked', 'declined']), text: body.optional(), expectsReply: z.boolean().optional(), intent: intent.optional(), idempotencyKey: key }).strict().superRefine((value, ctx) => {
+  if ((value.result === 'replied') !== (value.text !== undefined) || (value.result !== 'replied' && (value.expectsReply !== undefined || value.intent !== undefined))) ctx.addIssue({ code: 'custom', message: 'Only replied results have text, expectsReply, and intent' });
 });
 export type OpenInput = z.infer<typeof openSchema>;
-export type FinishInput = z.infer<typeof finishSchema>;
-export type FinishResult = { turnId: string; result: FinishInput['result']; messageId?: string };
+export type FinishInput = z.infer<typeof finishSchema> & { next?: { waitS?: number } };
+export type ClaimInput = z.infer<typeof claimSchema>;
+export type FinishResult = { turnId: string; result: FinishInput['result']; messageId?: string; approval?: 'none' | 'pending' };
+export type Claim = { turnId: string; conversationId: string; epoch: number; leaseExpiresAt: Date; message: Message };
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -28,7 +38,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 export class Relay {
-  constructor(private readonly pool: Pool, private readonly options: { oauthResource?: string } = {}) {}
+  constructor(private readonly pool: Pool, private readonly options: { oauthResource?: string; signals?: Signals } = {}) {}
 
   // Expiry persists even when the triggering request is rejected. The savepoint
   // prevents a rejected command from committing any partial operation writes.
@@ -79,21 +89,27 @@ export class Relay {
     return binding.oauthFamilyId ? { oauthFamilyId: binding.oauthFamilyId } : {};
   }
 
-  async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; token?: string }) {
+  async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; displayName?: string; token?: string; maxActive?: number }) {
     const data = parse(z.object({
       ownerId: z.uuid(),
       runtimeScope: z.string().min(1).max(256),
       provider: z.enum(['dots', 'grok', 'muse']),
+      displayName: z.string().trim().min(1).max(64).optional(),
       token: z.string().min(32).max(512).optional(),
+      maxActive: z.number().int().positive().optional(),
     }).strict(), input);
     return this.run(async client => {
       const owner = await client.query('SELECT 1 FROM owners WHERE id=$1', [data.ownerId]);
       if (!owner.rowCount) throw new RelayError('invalid_input', 'Unknown owner', 400);
+      if (data.maxActive !== undefined) {
+        const active = await client.query<{ n: number }>('SELECT count(*)::int AS n FROM bindings WHERE owner_id=$1 AND active', [data.ownerId]);
+        if (active.rows[0]!.n >= data.maxActive) throw new RelayError('limit_reached', 'Agent limit reached', 409);
+      }
       const existing = await client.query('SELECT 1 FROM bindings WHERE runtime_scope=$1 AND active', [data.runtimeScope]);
       if (existing.rowCount) throw new RelayError('runtime_in_use');
       const token = data.token ?? randomBytes(32).toString('base64url');
       const bindingId = randomUUID();
-      await client.query('INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash) VALUES($1,$2,$3,$4,$5)', [bindingId, data.ownerId, data.runtimeScope, data.provider, hash(token)]);
+      await client.query('INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash,display_name) VALUES($1,$2,$3,$4,$5,$6)', [bindingId, data.ownerId, data.runtimeScope, data.provider, hash(token), data.displayName ?? '']);
       return { bindingId, token, ownerId: data.ownerId };
     });
   }
@@ -103,7 +119,7 @@ export class Relay {
     return this.run(async client => {
       await this.requirePair(client, a, b, false);
       const pair = [a, b].sort();
-      await client.query('INSERT INTO grants(binding_a,binding_b) VALUES($1,$2) ON CONFLICT(binding_a,binding_b) DO UPDATE SET active=true', pair);
+      await client.query("INSERT INTO grants(binding_a,binding_b,status) VALUES($1,$2,'active') ON CONFLICT(binding_a,binding_b) DO UPDATE SET status='active'", pair);
     });
   }
 
@@ -144,15 +160,56 @@ export class Relay {
     await client.query('INSERT INTO idempotency(binding_id,operation,key,request_hash,response) VALUES($1,$2,$3,$4,$5)', [bindingId, operation, idempotencyKey, hash(JSON.stringify(request)), JSON.stringify(response)]);
   }
 
-  private async message(client: PoolClient, c: Conversation, sender: string, recipient: string, text: string, expectsReply: boolean, replyTo?: string) {
+  /** The receiving side's policy decides delivery; intent is the sender's claim, not proof. */
+  private async admit(client: PoolClient, sender: string, recipient: string, kind: Intent): Promise<'none' | 'pending'> {
+    const [a, b] = [sender, recipient].sort() as [string, string];
+    const grant = await client.query<{ policy: Policy }>(`SELECT CASE WHEN binding_a=$3 THEN policy_a ELSE policy_b END AS policy FROM grants WHERE binding_a=$1 AND binding_b=$2 AND active`, [a, b, recipient]);
+    const policy = grant.rows[0]?.policy;
+    if (!policy) throw new RelayError('forbidden', 'Pair consent is required', 403);
+    if (policy[kind] === 'never') throw new RelayError('forbidden_by_policy', 'The recipient does not accept this intent', 403);
+    const recent = await client.query<{ n: number }>("SELECT count(*)::int AS n FROM messages WHERE recipient_binding_id=$1 AND sender_binding_id=$2 AND created_at>clock_timestamp()-interval '24 hours'", [recipient, sender]);
+    if (recent.rows[0]!.n >= policy.daily_limit) throw new RelayError('rate_limited');
+    return policy[kind] === 'approve' ? 'pending' : 'none';
+  }
+
+  private async message(client: PoolClient, c: Conversation, sender: string, recipient: string, text: string, expectsReply: boolean, kind: Intent, replyTo?: string) {
+    const approval = await this.admit(client, sender, recipient, kind);
     const id = randomUUID();
     const seq = await client.query<{ sequence: number }>('UPDATE conversations SET next_sequence=next_sequence+1 WHERE id=$1 RETURNING next_sequence-1 AS sequence', [c.id]);
-    await client.query('INSERT INTO messages(id,conversation_id,sequence,sender_binding_id,recipient_binding_id,text,expects_reply,reply_to) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [id, c.id, seq.rows[0]!.sequence, sender, recipient, text, expectsReply, replyTo ?? null]);
+    await client.query('INSERT INTO messages(id,conversation_id,sequence,sender_binding_id,recipient_binding_id,text,expects_reply,reply_to,intent,approval) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [id, c.id, seq.rows[0]!.sequence, sender, recipient, text, expectsReply, replyTo ?? null, kind, approval]);
+    if (approval === 'none') await this.deliver(client, id, c, recipient);
+    return { id, approval };
+  }
+
+  private async deliver(client: PoolClient, messageId: string, c: Pick<Conversation, 'id' | 'epoch'>, recipient: string) {
     // Polling clients still get an atomic delivery record, without scheduling a webhook.
     await client.query(`INSERT INTO outbox(id,message_id,conversation_id,binding_id,epoch,status)
       SELECT $1,$2,$3,id,$5,CASE WHEN provider='muse' THEN 'not_required' ELSE 'pending' END
-      FROM bindings WHERE id=$4`, [randomUUID(), id, c.id, recipient, c.epoch]);
-    return id;
+      FROM bindings WHERE id=$4`, [randomUUID(), messageId, c.id, recipient, c.epoch]);
+    // Delivered only on commit; listeners treat it as a hint and re-check.
+    await client.query(`SELECT pg_notify('${INBOX_CHANNEL}',$1), pg_notify('${OUTBOX_CHANNEL}','')`, [recipient]);
+  }
+
+  /** Only the receiving agent's owner decides; unknown and foreign messages look the same. */
+  async decideApproval(ownerId: string, messageId: string, decision: 'approve' | 'decline') {
+    parse(uuid, ownerId); parse(uuid, messageId); parse(z.enum(['approve', 'decline']), decision);
+    return this.run(async client => {
+      const found = await client.query<{ conversation_id: string; recipient_binding_id: string }>(`SELECT m.conversation_id,m.recipient_binding_id FROM messages m
+        JOIN bindings r ON r.id=m.recipient_binding_id WHERE m.id=$1 AND r.owner_id=$2 AND m.approval='pending' FOR UPDATE OF m`, [messageId, ownerId]);
+      const row = found.rows[0];
+      if (!row) throw new RelayError('not_found', 'Not found', 404);
+      const c = (await client.query<Conversation>('SELECT * FROM conversations WHERE id=$1', [row.conversation_id])).rows[0]!;
+      if (c.status !== 'open') throw new RelayError('conversation_stopped');
+      await this.requirePair(client, c.binding_a, c.binding_b);
+      if (decision === 'decline') {
+        await client.query("UPDATE messages SET approval='declined' WHERE id=$1", [messageId]);
+        await this.stop(client, c.id, 'closed');
+        return { messageId, approval: 'declined' as const };
+      }
+      await client.query("UPDATE messages SET approval='approved' WHERE id=$1", [messageId]);
+      await this.deliver(client, messageId, c, row.recipient_binding_id);
+      return { messageId, approval: 'approved' as const };
+    });
   }
 
   async conversationOpen(token: string, input: OpenInput) {
@@ -160,7 +217,7 @@ export class Relay {
     return this.run(async client => {
       const me = await this.auth(client, token);
       await this.requirePair(client, me.id, data.recipientBindingId);
-      const existing = await this.prior<{ conversationId: string; messageId: string }>(client, me.id, 'open', data.idempotencyKey, data);
+      const existing = await this.prior<{ conversationId: string; messageId: string; approval: 'none' | 'pending' }>(client, me.id, 'open', data.idempotencyKey, data);
       if (existing) return existing;
       const busy = await client.query("SELECT 1 FROM turns t JOIN bindings b ON b.id=t.binding_id WHERE b.runtime_scope=$1 AND t.status IN ('active','uncertain')", [me.runtimeScope]);
       if (busy.rowCount) throw new RelayError('runtime_busy');
@@ -169,8 +226,8 @@ export class Relay {
       if (budget.rows[0].count >= 60) throw new RelayError('rate_limited');
       const id = randomUUID();
       const created = await client.query<Conversation>('INSERT INTO conversations(id,binding_a,binding_b) VALUES($1,$2,$3) RETURNING *', [id, me.id, data.recipientBindingId]);
-      const messageId = await this.message(client, created.rows[0]!, me.id, data.recipientBindingId, data.text, data.expectsReply);
-      const result = { conversationId: id, messageId };
+      const sent = await this.message(client, created.rows[0]!, me.id, data.recipientBindingId, data.text, data.expectsReply, data.intent ?? 'ask');
+      const result = { conversationId: id, messageId: sent.id, approval: sent.approval };
       await this.remember(client, me.id, 'open', data.idempotencyKey, data, result);
       return result;
     });
@@ -181,21 +238,42 @@ export class Relay {
     return this.run(async client => {
       const me = await this.auth(client, token);
       const c = await this.conversation(client, me, data.conversationId);
-      const messages = await client.query<Message>(`SELECT ${messageColumns} FROM messages WHERE conversation_id=$1 AND sequence>$2 ORDER BY sequence LIMIT $3`, [c.id, data.afterSequence, data.limit]);
+      // Held or declined input stays invisible to the receiving agent.
+      const messages = await client.query<Message & { approval: string }>(`SELECT ${messageColumns}, approval FROM messages WHERE conversation_id=$1 AND sequence>$2 AND (approval IN ('none','approved') OR sender_binding_id=$4) ORDER BY sequence LIMIT $3`, [c.id, data.afterSequence, data.limit, me.id]);
       const turns = await client.query<{ id: string; status: string; leaseExpiresAt: Date; result: string | null }>('SELECT id,status,lease_expires_at AS "leaseExpiresAt",result FROM turns WHERE conversation_id=$1 ORDER BY created_at LIMIT 12', [c.id]);
       const outbox = await client.query<{ id: string; messageId: string; status: string; attempts: number; lastError: string | null; updatedAt: Date }>('SELECT id,message_id AS "messageId",status,attempts,last_error AS "lastError",updated_at AS "updatedAt" FROM outbox WHERE conversation_id=$1 ORDER BY created_at LIMIT 13', [c.id]);
       return { conversationId: c.id, status: c.status, epoch: c.epoch, expiresAt: c.expires_at, messages: messages.rows, turns: turns.rows, outbox: outbox.rows };
     });
   }
 
-  async inboxClaim(token: string, input: { conversationId?: string } = {}) {
-    const data = parse(z.object({ conversationId: uuid.optional() }).strict(), input);
+  /**
+   * With waitS, the waiter is registered before each claim attempt so an
+   * arrival committed in between is not missed. Waiting holds no pool slot.
+   */
+  async inboxClaim(token: string, input: ClaimInput = {}): Promise<Claim | null> {
+    const data = parse(claimSchema, input);
+    const signals = this.options.signals;
+    if (!data.waitS || !signals) return this.claimOnce(token, data.conversationId);
+    const me = await this.authenticate(token);
+    const deadline = Date.now() + data.waitS * 1000;
+    for (;;) {
+      const waiter = signals.tryWait(me.id);
+      try {
+        const claim = await this.claimOnce(token, data.conversationId);
+        if (claim || !waiter) return claim;
+        const left = deadline - Date.now();
+        if (left <= 0 || !await waiter.wait(left)) return null;
+      } finally { waiter?.dispose(); }
+    }
+  }
+
+  private claimOnce(token: string, conversationId?: string): Promise<Claim | null> {
     return this.run(async client => {
       const me = await this.auth(client, token);
       const busy = await client.query("SELECT 1 FROM turns t JOIN bindings b ON b.id=t.binding_id WHERE b.runtime_scope=$1 AND t.status IN ('active','uncertain')", [me.runtimeScope]);
       if (busy.rowCount) return null;
-      if (data.conversationId) await this.conversation(client, me, data.conversationId);
-      const candidate = await client.query<{ id: string; conversation_id: string }>(`SELECT m.id,m.conversation_id FROM messages m JOIN conversations c ON c.id=m.conversation_id JOIN grants g ON g.binding_a=LEAST(c.binding_a,c.binding_b) AND g.binding_b=GREATEST(c.binding_a,c.binding_b) JOIN bindings peer ON peer.id=m.sender_binding_id WHERE m.recipient_binding_id=$1 AND c.status='open' AND g.active AND peer.active AND NOT EXISTS(SELECT 1 FROM turns t WHERE t.input_message_id=m.id) AND ($2::uuid IS NULL OR c.id=$2) ORDER BY m.created_at,m.sequence LIMIT 1`, [me.id, data.conversationId ?? null]);
+      if (conversationId) await this.conversation(client, me, conversationId);
+      const candidate = await client.query<{ id: string; conversation_id: string }>(`SELECT m.id,m.conversation_id FROM messages m JOIN conversations c ON c.id=m.conversation_id JOIN grants g ON g.binding_a=LEAST(c.binding_a,c.binding_b) AND g.binding_b=GREATEST(c.binding_a,c.binding_b) JOIN bindings peer ON peer.id=m.sender_binding_id WHERE m.recipient_binding_id=$1 AND c.status='open' AND g.active AND peer.active AND m.approval IN ('none','approved') AND NOT EXISTS(SELECT 1 FROM turns t WHERE t.input_message_id=m.id) AND ($2::uuid IS NULL OR c.id=$2) ORDER BY m.created_at,m.sequence LIMIT 1`, [me.id, conversationId ?? null]);
       if (!candidate.rows[0]) return null;
       const row = candidate.rows[0];
       const c = await this.conversation(client, me, row.conversation_id, true);
@@ -208,7 +286,16 @@ export class Relay {
     });
   }
 
-  async turnFinish(token: string, input: FinishInput) {
+  /** `next` claims the following input in the same call; it is not part of the idempotent request. */
+  async turnFinish(token: string, input: FinishInput): Promise<FinishResult & { next?: Claim | null }> {
+    const { next, ...rest } = input;
+    const wait = next === undefined ? undefined : parse(z.object({ waitS: waitS.optional() }).strict(), next);
+    const result = await this.finish(token, rest);
+    if (!wait) return result;
+    return { ...result, next: await this.inboxClaim(token, wait.waitS === undefined ? {} : { waitS: wait.waitS }) };
+  }
+
+  private async finish(token: string, input: Omit<FinishInput, 'next'>) {
     const data = parse(finishSchema, input);
     return this.run(async client => {
       const me = await this.auth(client, token);
@@ -226,10 +313,15 @@ export class Relay {
       // A terminal turn can finish, but cannot create an unprocessable 13th input.
       if (c.turn_count >= 12 && data.result === 'replied') throw new RelayError('turn_limit');
       const result: FinishResult = { turnId: turn.id, result: data.result };
-      if (data.result === 'replied') result.messageId = await this.message(client, c, me.id, message.rows[0]!.senderBindingId, data.text!, data.expectsReply ?? false, turn.input_message_id);
+      if (data.result === 'replied') {
+        const sent = await this.message(client, c, me.id, message.rows[0]!.senderBindingId, data.text!, data.expectsReply ?? false, data.intent ?? 'ask', turn.input_message_id);
+        result.messageId = sent.id; result.approval = sent.approval;
+      }
       const completed = await client.query("UPDATE turns SET status='finished',result=$2,finished_at=clock_timestamp() WHERE id=$1 AND lease_expires_at>clock_timestamp()", [turn.id, data.result]);
       if (!completed.rowCount) throw new RelayError('lease_expired');
       if (c.turn_count >= 12) await this.stop(client, c.id, 'limited');
+      // Claims in this runtime were held back while the turn was busy.
+      await client.query(`SELECT pg_notify('${INBOX_CHANNEL}', id::text) FROM bindings WHERE runtime_scope=$1 AND active`, [me.runtimeScope]);
       await this.remember(client, me.id, 'finish', data.idempotencyKey, data, result);
       return result;
     });
@@ -254,7 +346,7 @@ export class Relay {
   }
 
   private async revoke(client: PoolClient, a: string, b: string) {
-    await client.query('UPDATE grants SET active=false WHERE binding_a=$1 AND binding_b=$2', [a, b].sort());
+    await client.query("UPDATE grants SET status='revoked' WHERE binding_a=$1 AND binding_b=$2", [a, b].sort());
     const conversations = await client.query<{ id: string }>('SELECT id FROM conversations WHERE (binding_a=$1 AND binding_b=$2) OR (binding_a=$2 AND binding_b=$1)', [a, b]);
     for (const c of conversations.rows) await this.stop(client, c.id, 'closed');
   }
@@ -268,7 +360,7 @@ export class Relay {
   }
   private async disable(client: PoolClient, id: string) {
     await client.query('UPDATE bindings SET active=false WHERE id=$1', [id]);
-    await client.query('UPDATE grants SET active=false WHERE binding_a=$1 OR binding_b=$1', [id]);
+    await client.query("UPDATE grants SET status='revoked' WHERE binding_a=$1 OR binding_b=$1", [id]);
     const conversations = await client.query<{ id: string }>('SELECT id FROM conversations WHERE binding_a=$1 OR binding_b=$1', [id]);
     for (const c of conversations.rows) await this.stop(client, c.id, 'closed');
   }

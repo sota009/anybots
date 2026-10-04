@@ -1,4 +1,5 @@
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
+import { z } from 'zod';
 import { decryptSecret, webhookHeaders } from './crypto.js';
 import { validateWebhookUrl, type WebhookTransport } from './transport.js';
 
@@ -8,10 +9,10 @@ export interface Notification {
 export interface DeliveryResult {
   status: 'accepted' | 'retry' | 'failed' | 'uncertain' | 'configuration_required'; retryAfterMs?: number;
 }
-export interface NotificationDispatcher { deliver(notification: Notification, client?: PoolClient): Promise<DeliveryResult> }
+export interface NotificationDispatcher { deliver(notification: Notification): Promise<DeliveryResult> }
 export interface ProviderOptions {
   transport: WebhookTransport; encryptionKey: Buffer;
-  groks?: Record<string, { url: string; secret: string }>; grokExperimental?: boolean;
+  webhookHosts?: string[]; grokExperimental?: boolean;
   oauthResource?: string;
 }
 interface SubscriptionRow {
@@ -30,13 +31,14 @@ function classify(status: number, retryAfter?: string): DeliveryResult {
 
 export class ProviderDispatcher implements NotificationDispatcher {
   constructor(private readonly pool: Pool, private readonly options: ProviderOptions) {}
-  async deliver(notification: Notification, client?: PoolClient): Promise<DeliveryResult> {
+  async deliver(notification: Notification): Promise<DeliveryResult> {
     // Muse pulls its inbox; never treat it as an OpenAI event subscriber.
     if (notification.provider === 'muse') return { status: 'configuration_required' };
-    const database = client ?? this.pool;
+    const database = this.pool;
     if (notification.provider === 'grok') {
-      const config = this.options.groks?.[notification.bindingId];
-      if (!this.options.grokExperimental || !config) return { status: 'configuration_required' };
+      if (!this.options.grokExperimental) return { status: 'configuration_required' };
+      const config = await this.grokWebhook(notification.bindingId);
+      if (!config) return { status: 'configuration_required' };
       if (this.options.oauthResource !== undefined) {
         const authority = await database.query(`SELECT f.id FROM oauth_families f
           JOIN bindings b ON b.id=f.binding_id
@@ -46,8 +48,7 @@ export class ProviderDispatcher implements NotificationDispatcher {
         if (!authority.rowCount) return { status: 'configuration_required' };
       }
       let url: URL;
-      try { url = validateWebhookUrl(config.url, ['api2.cursor.sh']); } catch { return { status: 'configuration_required' }; }
-      if (!url.pathname.startsWith('/automations/webhook/') || url.search) return { status: 'configuration_required' };
+      try { url = grokWebhookUrl(config.url, this.options.webhookHosts ?? []); } catch { return { status: 'configuration_required' }; }
       // Experimental application envelope, not a claimed xAI webhook standard.
       const body = JSON.stringify({ event: 'inbox.ready', notification_id: notification.id,
         conversation_id: notification.conversationId, message_id: notification.messageId });
@@ -82,4 +83,20 @@ export class ProviderDispatcher implements NotificationDispatcher {
     }
     return { status: 'accepted' };
   }
+
+  private async grokWebhook(bindingId: string) {
+    const row = (await this.pool.query<{ webhook_encrypted: string | null }>("SELECT webhook_encrypted FROM bindings WHERE id=$1 AND active AND provider='grok'", [bindingId])).rows[0];
+    if (!row?.webhook_encrypted) return undefined;
+    try { return grokWebhook.parse(JSON.parse(decryptSecret(row.webhook_encrypted, this.options.encryptionKey, bindingId))); }
+    catch { return undefined; }
+  }
+}
+
+export const grokWebhook = z.strictObject({ url: z.string().max(2048), secret: z.string().min(16).max(4096) });
+
+/** Only Grok routine webhooks on an operator-allowed host; rejects queries, credentials, and other paths. */
+export function grokWebhookUrl(value: string, allowedHosts: string[]): URL {
+  const url = validateWebhookUrl(value, allowedHosts.filter(host => host === 'api2.cursor.sh'));
+  if (!url.pathname.startsWith('/automations/webhook/') || url.pathname.length <= '/automations/webhook/'.length || url.search) throw new Error('invalid_webhook');
+  return url;
 }

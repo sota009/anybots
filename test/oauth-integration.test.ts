@@ -1,20 +1,15 @@
 import { randomBytes, createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { OAuthPilot } from '../src/oauth.js';
 import { Relay } from '../src/relay.js';
 import { buildApp } from '../src/app.js';
-import { admin } from '../src/admin.js';
 import { createOwner, provision, testDatabase } from './helpers.js';
 
 const issuer = 'https://relay.example.test';
 const redirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
 let db: Awaited<ReturnType<typeof testDatabase>>;
-let directory: string;
-beforeAll(async () => { db = await testDatabase(); directory = await mkdtemp(join(tmpdir(), 'anybots-oauth-admin-')); });
-afterAll(async () => { await db?.close(); if (directory) await rm(directory, { recursive: true }); });
+beforeAll(async () => { db = await testDatabase(); });
+afterAll(async () => { await db?.close(); });
 
 it('connects operator pairing, browser consent, OAuth tokens and the real MCP authorization boundary', async () => {
   const oauth = new OAuthPilot(db.pool, { issuer, redirectUris: [redirect] });
@@ -37,11 +32,7 @@ it('connects operator pairing, browser consent, OAuth tokens and the real MCP au
     expect(page.statusCode).toBe(200);
     const formToken = page.body.match(/name="form_token" value="([^"]+)"/)?.[1];
     const cookie = String(page.headers['set-cookie']).split(';')[0]!;
-    const provisioned = await admin(relay, { action: 'connect', bindingId: binding.bindingId }, directory, oauth);
-    expect(provisioned).not.toHaveProperty('pairingCode');
-    if (!('credentialsFile' in provisioned)) throw new Error('Missing private file');
-    expect((await stat(provisioned.credentialsFile)).mode & 0o777).toBe(0o600);
-    const pairing = JSON.parse(await readFile(provisioned.credentialsFile, 'utf8'));
+    const pairing = await oauth.issuePairingCode(binding.bindingId);
     const consent = await app.inject({ method: 'POST', url: '/oauth/authorize', headers: { ...headers, origin: issuer, cookie },
       payload: { form_token: formToken, pairing_code: pairing.pairingCode, consent: 'connect' } });
     expect(consent.statusCode).toBe(200);

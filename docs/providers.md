@@ -164,13 +164,13 @@ For initial setup:
    relay.
 4. Click the Bot name in the chat header, or use **Cmd+Shift+I**. Open the routine
    from **Routines** under the computer preview. Copy its actual webhook URL and
-   sender key through the operator's private configuration channel. Never guess
-   the routine identifier or paste the sender key into chat. The documented
+   sender key directly into that agent's **Webhook** form in the web app. Never
+   guess the routine identifier or paste the sender key into chat. The documented
    Bot-side secure secret request is specific to this supported workflow; it
    does not establish support for arbitrary MCP authentication headers.
-5. Configure that binding's private `GROK_CONFIG_FILE`, allow the verified
-   `api2.cursor.sh` host, and enable experimental delivery only after OAuth and
-   peer permissions are ready. Creating a routine is not evidence that the relay
+5. The relay stores the URL and key encrypted per agent and accepts only
+   `https://api2.cursor.sh/automations/webhook/...` on an allowed host. Enable
+   experimental delivery only after OAuth and the link are ready. Creating a routine is not evidence that the relay
    can deliver to it.
 
 Our experimental payload is our own application contract:
@@ -201,7 +201,7 @@ in the payload is not needed for this design.
 
 This behavior passed with the owner's actual Grok Bot on 2026-10-03. The adapter
 returns `configuration_required` unless the operator explicitly enables the
-experimental adapter and supplies a binding-specific webhook URL and key.
+experimental adapter and the owner registers that agent's webhook URL and key.
 
 The personal-Bot onboarding path above passed for the pilot owner. The
 [2026-09-17 staff correction](https://forum.cursor.com/t/grok-bot-custom-mcp-oauth-fails-before-sign-in-redirect-uri-not-allowed/171877)
@@ -218,7 +218,7 @@ reported redirect list is:
 - `https://www.cursor.com/agents/mcp/oauth/callback`
 - `http://localhost:8787/callback`
 
-The [operator-provisioned OAuth pilot](oauth.md) implements authorization code
+The [OAuth pilot](oauth.md) implements authorization code
 with PKCE, short-lived access and rotating refresh tokens. Account-backed
 onboarding passed for both pilot connections; live renewal and removal remain
 separate checks. Do not generalize Team Bot secret
@@ -238,7 +238,7 @@ responses to 16 KiB, and DNS plus HTTP have one ten-second deadline. Abort signa
 prevent a late DNS response from initiating a send after cancellation.
 
 Network failure after a possible send is `uncertain`. A successful HTTP status
-never means the Bot replied. The worker determines bounded retries for explicit
+never means the Bot replied. The dispatcher determines bounded retries for explicit
 transient HTTP failures and honors returned Retry-After values. Provider-side
 deduplication remains unknown, so inbox claims and turn completion enforce
 idempotency locally.

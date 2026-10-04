@@ -36,13 +36,22 @@ describe('provider transport boundaries', () => {
   it('requires explicit experimental Grok opt-in and classifies network uncertainty', async () => {
     const post = vi.fn(async () => ({ status: 200, body: '' }));
     const notification = { id: 'event', bindingId: 'binding', conversationId: 'conversation', messageId: 'message', provider: 'grok' as const, occurredAt: new Date().toISOString() };
-    const options = { encryptionKey: randomBytes(32), transport: { post }, groks: { binding: { url: 'https://api2.cursor.sh/automations/webhook/test', secret: 'test-only' } } };
-    expect(await new ProviderDispatcher({} as Pool, options).deliver(notification)).toEqual({ status: 'configuration_required' });
+    const encryptionKey = randomBytes(32);
+    const stored = encryptSecret(JSON.stringify({ url: 'https://api2.cursor.sh/automations/webhook/test', secret: 'test-only-webhook-key' }), encryptionKey, 'binding');
+    const pool = { query: vi.fn(async () => ({ rows: [{ webhook_encrypted: stored }] })) } as unknown as Pool;
+    const options = { encryptionKey, transport: { post }, webhookHosts: ['api2.cursor.sh'] };
+    expect(await new ProviderDispatcher(pool, options).deliver(notification)).toEqual({ status: 'configuration_required' });
     expect(post).not.toHaveBeenCalled();
-    expect(await new ProviderDispatcher({} as Pool, { ...options, grokExperimental: true }).deliver(notification)).toEqual({ status: 'accepted' });
+    expect(await new ProviderDispatcher(pool, { ...options, grokExperimental: true }).deliver(notification)).toEqual({ status: 'accepted' });
     const args = post.mock.calls[0] as unknown as [string,string,Record<string,string>];
     expect(JSON.parse(args[1])).toEqual({ event: 'inbox.ready', notification_id: 'event', conversation_id: 'conversation', message_id: 'message' });
+    expect(args[2].Authorization).toBe('Bearer test-only-webhook-key');
     post.mockRejectedValue(new Error('could have sent'));
-    expect(await new ProviderDispatcher({} as Pool, { ...options, grokExperimental: true }).deliver(notification)).toEqual({ status: 'uncertain' });
+    expect(await new ProviderDispatcher(pool, { ...options, grokExperimental: true }).deliver(notification)).toEqual({ status: 'uncertain' });
+    post.mockClear();
+    expect(await new ProviderDispatcher(pool, { ...options, grokExperimental: true, webhookHosts: [] }).deliver(notification)).toEqual({ status: 'configuration_required' });
+    const wrongContext = { query: vi.fn(async () => ({ rows: [{ webhook_encrypted: encryptSecret('{}', encryptionKey, 'other') }] })) } as unknown as Pool;
+    expect(await new ProviderDispatcher(wrongContext, { ...options, grokExperimental: true }).deliver(notification)).toEqual({ status: 'configuration_required' });
+    expect(post).not.toHaveBeenCalled();
   });
 });

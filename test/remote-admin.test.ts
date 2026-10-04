@@ -11,7 +11,8 @@ const host = 'srv-db0lku9srm7s7384ral0@ssh.singapore.render.com';
 const bindingId = 'a2222222-2222-4222-8222-222222222222';
 const otherId = 'b2222222-2222-4222-8222-222222222222';
 const ownerId = 'a1111111-1111-4111-8111-111111111111';
-const provision = { action: 'provision', ownerId, runtimeScope: 'pilot', provider: 'dots' };
+const inviteId = 'c3333333-3333-4333-8333-333333333333';
+const provision = { action: 'signup_invite', ownerId };
 const secret = 'test-secret-must-not-be-printed';
 let directory: string;
 let configFile: string;
@@ -49,7 +50,7 @@ function mockSsh(replies: Reply[]) {
 function run(mock: ReturnType<typeof mockSsh>, command: unknown = provision, extra = {}) {
   return runRemoteAdmin({ configFile, credentialsDirectory: output, input: Readable.from([JSON.stringify(command)]), spawnImpl: mock.spawnImpl, ...extra });
 }
-const provisionMetadata = (file = `/app/.local/${bindingId}.json`) => JSON.stringify({ bindingId, ownerId, credentialsFile: file });
+const provisionMetadata = (file = `/app/.local/invite-${inviteId}.json`) => JSON.stringify({ inviteId, credentialsFile: file, expiresAt: '2026-10-11T00:00:00.000Z' });
 
 it('uses fixed SSH options and stdin and saves credentials exclusively with mode 0600', async () => {
   const mock = mockSsh([{ stdout: provisionMetadata() }, { stdout: JSON.stringify({ token: secret, bindingId }) }]);
@@ -60,22 +61,14 @@ it('uses fixed SSH options and stdin and saves credentials exclusively with mode
   expect(first.options.shell).toBe(false);
   expect(first.args).toEqual(expect.arrayContaining(['-F', '/dev/null', 'BatchMode=yes', 'IdentitiesOnly=yes', 'StrictHostKeyChecking=yes', host, 'cd /app && exec node dist/admin.js']));
   expect(first.input).toBe(JSON.stringify(provision));
-  expect(mock.calls[1]!.args.at(-1)).toBe(`cd /app && exec cat -- /app/.local/${bindingId}.json`);
+  expect(mock.calls[1]!.args.at(-1)).toBe(`cd /app && exec cat -- /app/.local/invite-${inviteId}.json`);
   expect(JSON.stringify(result)).not.toContain(secret);
   expect(JSON.parse(await readFile(result.credentialsFile, 'utf8')).token).toBe(secret);
   expect((await lstat(result.credentialsFile)).mode & 0o777).toBe(0o600);
   expect((await lstat(output)).mode & 0o777).toBe(0o700);
 });
 
-it('accepts connect metadata only when its binding matches the request', async () => {
-  const filename = `/app/.local/${bindingId}-connect-${otherId}.json`;
-  const mock = mockSsh([{ stdout: JSON.stringify({ bindingId, credentialsFile: filename, expiresAt: '2026-10-04T00:00:00.000Z' }) }, { stdout: JSON.stringify({ pairingCode: secret }) }]);
-  const result = await run(mock, { action: 'connect', bindingId });
-  expect(result.expiresAt).toBe('2026-10-04T00:00:00.000Z');
-  expect(JSON.stringify(result)).not.toContain(secret);
-});
-
-it.each(['../outside.json', `/app/.local/${bindingId}.json; echo injected`, `/app/.local/${otherId}.json`])('rejects injected or mismatched remote paths without a second SSH call: %s', async (path) => {
+it.each(['../outside.json', `/app/.local/invite-${inviteId}.json; echo injected`, `/app/.local/invite-${otherId}.json`])('rejects injected or mismatched remote paths without a second SSH call: %s', async (path) => {
   const mock = mockSsh([{ stdout: provisionMetadata(path) }]);
   await expect(run(mock)).rejects.toThrow('Remote admin operation failed');
   expect(mock.calls).toHaveLength(1);
@@ -83,7 +76,7 @@ it.each(['../outside.json', `/app/.local/${bindingId}.json; echo injected`, `/ap
 
 it.each([
   `${provisionMetadata()}\n${secret}`,
-  JSON.stringify({ bindingId, credentialsFile: `/app/.local/${bindingId}.json`, token: secret }),
+  JSON.stringify({ inviteId, credentialsFile: `/app/.local/invite-${inviteId}.json`, expiresAt: '2026-10-11T00:00:00.000Z', url: secret }),
   JSON.stringify({ status: secret }),
   secret,
 ])('never forwards unknown remote output', async (stdout) => {
@@ -188,9 +181,12 @@ it('rejects unknown nested status fields that could contain secrets', async () =
   const mock = mockSsh([{ stdout: JSON.stringify({ ...diagnostic, oauth: { ...diagnostic.oauth, token: secret } }) }]);
   await expect(run(mock, { action: 'status', bindingId })).rejects.toThrow('Remote admin operation failed');
 });
-it('rejects invalid commands and missing consent before SSH', async () => {
+it('rejects removed and invalid commands before SSH', async () => {
   const mock = mockSsh([]);
-  await expect(run(mock, { action: 'grant', a: bindingId, b: otherId, consentConfirmed: false })).rejects.toThrow('Remote admin operation failed');
+  for (const removed of [{ action: 'grant', a: bindingId, b: otherId, consentConfirmed: true }, { action: 'create_owner' },
+    { action: 'provision', ownerId, runtimeScope: 'pilot', provider: 'dots' }, { action: 'connect', bindingId }]) {
+    await expect(run(mock, removed)).rejects.toThrow('Remote admin operation failed');
+  }
   await expect(run(mock, { ...provision, command: secret })).rejects.toThrow('Remote admin operation failed');
   await expect(run(mock, provision, { input: Readable.from(['{']) })).rejects.toThrow('Remote admin operation failed');
   expect(mock.calls).toHaveLength(0);
@@ -204,11 +200,6 @@ it('rejects unsafe key permissions and symlinks before SSH', async () => {
   await symlink(configFile, identity);
   await expect(run(mock)).rejects.toThrow('Remote admin operation failed');
   expect(mock.calls).toHaveLength(0);
-});
-it('rejects a connect response for another binding before retrieving credentials', async () => {
-  const mock = mockSsh([{ stdout: JSON.stringify({ bindingId: otherId, credentialsFile: `/app/.local/${otherId}-connect-${bindingId}.json`, expiresAt: diagnostic.checkedAt }) }]);
-  await expect(run(mock, { action: 'connect', bindingId })).rejects.toThrow('Remote admin operation failed');
-  expect(mock.calls).toHaveLength(1);
 });
 it('bounds credential retrieval and requires reissue when its output is excessive', async () => {
   const mock = mockSsh([{ stdout: provisionMetadata() }, { stdout: secret.repeat(10000) }]);
@@ -232,7 +223,7 @@ it('prints only metadata on CLI success, discarding even successful SSH stderr',
   let stdout = ''; let stderr = '';
   const code = await remoteAdminCli({ argv: ['--config', configFile, '--credentials-dir', output], input: Readable.from([JSON.stringify(provision)]), stdout: { write: (s: string) => { stdout += s; } }, stderr: { write: (s: string) => { stderr += s; } }, spawnImpl: mock.spawnImpl });
   expect(code).toBe(0);
-  expect(JSON.parse(stdout)).toEqual({ bindingId, ownerId, credentialsFile: join(output, `${bindingId}.json`) });
+  expect(JSON.parse(stdout)).toEqual({ inviteId, expiresAt: '2026-10-11T00:00:00.000Z', credentialsFile: join(output, `invite-${inviteId}.json`) });
   expect(stdout).not.toContain(secret);
   expect(stderr).toBe('');
 });

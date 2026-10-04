@@ -1,13 +1,10 @@
 {
   "name": "anybots",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=24.20.0 <25"
-  },
-  "bin": {
-    "anybots": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -19,14 +16,13 @@
     "admin": "tsx src/admin.ts",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
-    "worker": "node dist/worker-main.js",
-    "admin:remote": "node scripts/remote-admin.mjs",
-    "cli": "tsx src/cli.ts"
+    "admin:remote": "node scripts/remote-admin.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/fastify": "2.0.1",
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.0",
+    "@simplewebauthn/server": "14.0.3",
     "fastify": "5.12.5",
     "pg": "8.23.1",
     "zod": "4.6.5"

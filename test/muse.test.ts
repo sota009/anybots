@@ -1,18 +1,13 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { admin } from '../src/admin.js';
 import { buildApp } from '../src/app.js';
-import { DirectoryRegistry } from '../src/directory.js';
 import { EventSubscriptions } from '../src/events.js';
 import { ProviderDispatcher } from '../src/providers/index.js';
 import { readiness } from '../src/readiness.js';
 import { Relay } from '../src/relay.js';
-import { dispatchOne } from '../src/worker.js';
-import { createOwner, provision, testDatabase } from './helpers.js';
+import { dispatchOne } from '../src/dispatch.js';
+import { provision, setGrokWebhook, testDatabase } from './helpers.js';
 
 let db: Awaited<ReturnType<typeof testDatabase>>;
 let relay: Relay;
@@ -26,37 +21,19 @@ beforeEach(async () => {
   grok = await provision(relay, db.pool, { provider: 'grok' });
 });
 
-it('provisions a Muse credential privately and reports polling without claiming notifications are configured', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'anybots-muse-'));
-  try {
-    const ownerId = await createOwner(db.pool);
-    const result = await admin(
-      relay,
-      { action: 'provision', ownerId, runtimeScope: randomUUID(), provider: 'muse' },
-      directory,
-      undefined,
-      undefined,
-      new DirectoryRegistry(db.pool),
-    );
-    expect(result).not.toHaveProperty('token');
-    if (!('credentialsFile' in result)) throw new Error('Expected credentials file');
-    const secret = JSON.parse(await readFile(result.credentialsFile, 'utf8'));
-    expect((await stat(result.credentialsFile)).mode & 0o777).toBe(0o600);
-    expect(await relay.authenticate(secret.token)).toMatchObject({ provider: 'muse', id: result.bindingId });
-    expect(await readiness(db.pool, { bindingId: secret.bindingId }, { notifications: {} })).toMatchObject({
-      binding: { provider: 'muse' }, notification: { configured: false, mode: 'poll' }, liveVerification: 'not_verified',
-    });
-  } finally { await rm(directory, { recursive: true }); }
+it('reports polling for Muse without claiming notifications are configured', async () => {
+  expect(await readiness(db.pool, { bindingId: muse.bindingId }, { notifications: {} })).toMatchObject({
+    binding: { provider: 'muse' }, notification: { configured: false, mode: 'poll' }, liveVerification: 'not_verified',
+  });
 });
 
 // A real local MCP client and Postgres, with a simulated Grok webhook; not live AI evidence.
 it('roundtrips through MCP while only Grok delivery consumes notification budget', async () => {
   await relay.grantPair(muse.bindingId, grok.bindingId);
   const post = vi.fn(async () => ({ status: 202, body: '' }));
-  const dispatcher = new ProviderDispatcher(db.pool, { transport: { post }, encryptionKey: randomBytes(32),
-    grokExperimental: true, groks: { [grok.bindingId]: {
-      url: 'https://api2.cursor.sh/automations/webhook/local-test', secret: 'test-only',
-    } } });
+  const encryptionKey = randomBytes(32);
+  await setGrokWebhook(db.pool, grok.bindingId, encryptionKey, 'https://api2.cursor.sh/automations/webhook/local-test', 'test-only-webhook-key');
+  const dispatcher = new ProviderDispatcher(db.pool, { transport: { post }, encryptionKey, webhookHosts: ['api2.cursor.sh'], grokExperimental: true });
   const app = buildApp(relay);
   const address = await app.listen({ host: '127.0.0.1', port: 0 });
   const client = new Client({ name: 'simulated-muse', version: '1.0.0' }, { versionNegotiation: { mode: 'legacy' } });

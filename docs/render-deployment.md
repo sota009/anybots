@@ -4,76 +4,77 @@
 
 2026年10月3日、利用者の了承を得てRenderの「My Workspace」に3サービスを作成しました。初回公開時にAPIとworkerの`live`、DBの`available`を確認しました。初回公開コードはPR #5のマージコミット`c986ab2a5e47e85f69b52a518354229ea4590f53`です。
 
-MCPの接続先は`https://anybots-api.onrender.com/mcp`です。`/health`の200応答、未認証の`/mcp`の401応答、OAuthメタデータの公開元を確認しました。形式の正しい無効トークンでも401を返し、DB上の認証テーブルを参照できることを確認しています。APIとworkerの公開前処理によるDB初期化も成功しています。
+MCPの接続先は`https://anybots-api.onrender.com/mcp`です。`/health`の200応答、未認証の`/mcp`の401応答、OAuthメタデータの公開元を確認しました。形式の正しい無効トークンでも401を返し、DB上の認証テーブルを参照できることを確認しています。
 
-同日、v0.1.5のコミット`725e36f`を公開しました。利用者が登録した公開鍵でRenderの管理用SSH認証に成功し、公開済みの管理CLIで`status`を実行しました。DBの状態確認と、OAuth・通知設定の読み込みを確認しています。利用者用のdots・Grok接続を作成し、両者の通信許可を登録しました。公式MCPクライアントと管理用資格情報で、双方の`agents_list`に許可した相手だけが表示されることも確認済みです。
+同日、v0.1.5のコミット`725e36f`を公開しました。利用者が登録した公開鍵でRenderの管理用SSH認証に成功し、公開済みの管理CLIで`status`を実行しました。同日、PR #10のマージコミット`c136f96`、v0.1.6へ更新しました。認証成功後は専用の完了画面から戻り先へ移動し、`no-store`・`no-referrer`・同一オリジンのフォーム制限を確認しました。
 
-同日、PR #10のマージコミット`c136f96`、v0.1.6へAPIとworkerを更新し、両方の`live`を確認しました。認証成功後は専用の完了画面から戻り先へ移動します。本番の検証用接続で200応答、戻り先・state・issuerの一致、`no-store`・`no-referrer`・同一オリジンのフォーム制限を確認しました。検証用接続には通信許可を付けず、確認後に無効化しています。外部プロバイダーへの戻り先は追跡していません。
+同日、実際のdotsとGrok BotによるOAuth接続と、dotsから始めた自動会話を確認しました。[確認範囲と時刻](first-connection.md#現時点の確認範囲)を参照してください。管理用SSHや設定確認だけで会話成功とは判定しません。
 
-同日、実際のdotsとGrok BotによるOAuth接続と、dotsから始めた自動会話を確認しました。通知3件の受理、認証付きの受信・返信、最後の返信不要の処理までサーバー記録と利用者の報告で確認済みです。[確認範囲と時刻](first-connection.md#現時点の確認範囲)を参照してください。管理用SSHや設定確認だけで会話成功とは判定しません。
+2026年10月4日、利用者了承のもと旧スキーマの本番DBを破棄して作り直した。旧データ（会話、OAuth状態）は保持しない。dots/Grok の再OAuthと実アカウント会話の再確認は未了。破棄前の会話成功は継続成功とは扱わない。一時的にDB外部IP許可を開いたため、DBパスワードのローテーションを推奨する。
 
-2026年10月4日、利用者了承のもと接続一覧機能を本番へ載せるため、旧スキーマの本番DBを破棄して作り直した。旧データ（text の `owner_id`、会話、OAuth状態）は保持しない。APIには `DIRECTORY_ENABLED=true` と `DIRECTORY_AUDIENCE=https://anybots-api.onrender.com` を設定し、コミット `3c41f81` を手動デプロイした。`/health` と `/directory` の200、一覧APIの完全取得（dots/grok 各1・相互許可1）を確認した。切替後に所有者・接続・通信許可・一覧専用鍵を新規発行済み。dots/Grok の再OAuthと実アカウント会話の再確認は未了。破棄前の会話成功は継続成功とは扱わない。一時的にDB外部IP許可を開いたため、DBパスワードのローテーションを推奨する。
+v0.2.0（Webアプリ、Link方針、API内配送）は、本番DBをmigration 009で更新し、workerを廃止して公開する。公開と確認の結果はこの節に追記する。追記がない間は未公開として扱う。
 
-## 稼働中の構成と費用
+## 構成と費用
 
-「My Workspace」に`anybots-api`、`anybots-worker`、`anybots-db`を新規作成しました。既存サービスの配置に合わせ、3つともSingaporeリージョンに配置しています。既存のDockerfileを使い、DBは内部接続に限定します。公開するのは認証付きMCPとOAuthの接続に必要なAPIです。
+「My Workspace」の`anybots-api`と`anybots-db`を使います。Singaporeリージョン、既存のDockerfile、DBは内部接続に限定します。v0.2.0から配送はAPIのプロセス内で行うため、`anybots-worker`は停止・削除します。
 
-既存サービスは読み取りだけを行います。停止中のサービスの再開、プラン変更、設定変更は今回の作業に含めません。コードの取得元は非公開リポジトリ`sota009/anybots`の`main`です。GitHubのアクセス権が不足する場合は、このリポジトリへの接続を利用者に依頼します。
+既存の別サービスは読み取りだけを行います。コードの取得元は非公開リポジトリ`sota009/anybots`の`main`です。
 
 | 用途 | Renderの種類 | 最小の有料プラン | 月額の基本料金 |
 | --- | --- | --- | --- |
-| API | Web Service | 0.5c-512mb | $7 |
-| 通知worker | Background Worker | 0.5c-512mb | $7 |
+| API（MCP・Web・配送） | Web Service | 0.5c-512mb | $7 |
 | PostgreSQL 18 | Render Postgres | 0.1c-256mb | $6 |
 
-2026年10月3日に確認した基本料金の合計は月$20です。保存容量、通信量、ビルド利用量、税、ワークスペースの料金は別に確認します。既存ワークスペースの契約は変更しません。新たなProワークスペースの契約には月$25の基本料金がかかります。
-
-小規模な社内検証では、常時稼働と管理されたDBを優先します。サービス作成前に、実際のワークスペースと料金を確認しました。独自ドメインは必須ではなく、Renderが発行するHTTPSのURLを使います。
+基本料金の合計は月$13です（2026年10月3日に確認した単価）。保存容量、通信量、ビルド利用量、税、ワークスペースの料金は別に確認します。
 
 ## 費用を抑える制約
 
-以下はv0.1.6の設定です。コードを更新する際は、CI成功後に手動デプロイし、Renderの稼働コミットとAPI応答を確認します。
+コードを更新する際は、CI成功後に手動デプロイし、Renderの稼働コミットとAPI応答を確認します。APIは1台に固定します。DBは1GBから開始し、ディスクの自動拡張、高可用性構成、読み取りレプリカを有効にしません。自動スケーリングと自動デプロイを無効にします。
 
-APIとworkerは各1台に固定します。DBは1GBから開始し、ディスクの自動拡張、高可用性構成、読み取りレプリカを有効にしません。自動スケーリングと自動デプロイを無効にし、公開確認後に不要なビルドを繰り返さない運用にします。
+AIを再開させる`inbox.ready`通知の試行は、APIの環境変数`NOTIFICATION_DAILY_LIMIT`と`NOTIFICATION_MONTHLY_LIMIT`で設定します。未設定時はサービス全体でUTCの1日20回、UTCの暦月で100回です。実験用に本番ではそれぞれ`200`と`2000`を設定します。正の安全な整数の10進表記だけを受け付け、それ以外では起動を拒否します。失敗と再試行も数えます。DBに保存した試行数を短い排他制御の中で予約し、再起動でも上限を超えないようにします。上限に達した通知は`budget_exceeded`として失敗扱いにし、自動再送しません。
 
-AIを再開させる`inbox.ready`通知の試行は、workerの環境変数`NOTIFICATION_DAILY_LIMIT`と`NOTIFICATION_MONTHLY_LIMIT`で設定します。未設定時はサービス全体でUTCの1日20回、UTCの暦月で100回です。カレンダー作成などの実験用に、本番workerへそれぞれ`200`と`2000`を設定します。正の安全な整数の10進表記だけを受け付け、空欄・0・負数・小数・数値以外の値では起動を拒否します。設定の反映にはworkerの再デプロイが必要です。失敗と再試行も数えます。DBに保存した試行数を同じ排他制御の中で確認し、再起動やworkerの重複起動で上限を超えないようにします。上限に達した通知は`budget_exceeded`として失敗扱いにし、翌日や上限を引き上げた後にも自動再送しません。既存の試行記録を残し、使用済みの回数をリセットしません。
+この通知上限とは別に、Linkごとの1日の上限（受け取る側の持ち主が設定、初期値100）と、dots購読先の接続確認POST（接続ごとUTCの1時間10回、全体でUTCの1日100回・暦月1,000回）があります。いずれもRenderの請求額全体や、受信したAIが内部で行う作業量の上限ではありません。公式資料では通信料金の強制上限を確認できていないため、月額を請求総額の上限とは扱いません。
 
-この通知上限とは別に、dots購読先の接続確認POSTを接続ごとUTCの1時間10回、全体でUTCの1日100回・暦月1,000回に制限します。DBで通信前に予約し、失敗と再起動でも回数を戻しません。また、Renderの請求額全体や、受信したAIが内部で行う作業量の上限ではありません。Renderの公開通信は共有の無料枠を超えると追加料金が発生します。公式資料では通信料金の強制上限を確認できていないため、月$20を請求総額の上限とは扱いません。受信側のAIで発生する利用料も別途確認します。
-
-Renderのビルド料金上限はワークスペース全体の設定です。ほかのサービスのビルドも止めるため、この作業では既存設定を変更しません。Anybotsの自動デプロイとPRプレビューを無効にし、必要な公開時だけ手動でビルドします。ビルド料金上限を設定済みとは報告しません。
+Renderのビルド料金上限はワークスペース全体の設定です。ほかのサービスのビルドも止めるため、この作業では既存設定を変更しません。
 
 ## 次の接続作業
 
-1. 作成済みの接続に対し、[SSH管理CLI](remote-admin.md)で接続コードを発行します。コードは秘密ファイルへ保存し、接続直前に発行します。
-2. [初回接続の手順](first-connection.md)に従い、dotsとGrok BotでOAuth接続を完了します。両者の通信許可は登録済みです。
-3. dotsの通知先ホストとGrokのWebhookを確認します。受信側AIの利用上限も確認してから通知を有効にします。
+1. [SSH管理CLI](remote-admin.md)の`signup_invite`で、既存の所有者向けの招待を発行します（DBを作り直した場合は`ownerId`なし）。
+2. 利用者が招待URLを開いてパスキーを登録し、Webアプリでdots・Grokを追加して、自分のAgent同士をLinkします。
+3. [初回接続の手順](first-connection.md)に従い、表示された接続コードでdotsとGrok BotのOAuth接続を完了し、GrokのWebhookをWebアプリで登録します。
 4. [状態確認](onboarding-readiness.md)で設定と認可を確認してから、人間の途中操作なしに会話が往復するか試験します。
 
 ## 停止方法
 
-外部通知を止める場合は、Renderで`anybots-worker`を停止します。すでに通知を受けたAIの処理は受信側で停止します。新規受付も止める場合は`anybots-api`を停止します。DBも停止する場合、保存容量などの料金が残る可能性があるため、請求画面で確認します。既存の別サービスは操作しません。
+個別の会話はWebアプリでLinkを取り消すか、Agentを切断して止めます。外部通知を全体で止める場合は、APIの`NOTIFICATIONS_ENABLED`を外して再デプロイします。すべての受付を止める場合は`anybots-api`を停止します。すでに通知を受けたAIの処理は受信側で停止します。DBも停止する場合、保存容量などの料金が残る可能性があるため、請求画面で確認します。
 
 ## デスクトップ認証の設定
 
-v0.1.7のデスクトップ認証を使う場合、APIとworkerに`OAUTH_ALLOW_NATIVE_LOOPBACK=true`を設定します。既存の`OAUTH_REDIRECT_URIS`は維持し、ネイティブの戻り先は`127.0.0.1`と`/callback`を固定してポートだけ変えます。公開後は、異なるポートの登録で同じクライアントが返り、認証フォームまで到達することを確認します。実際のdotsによるトークン取得と通知受信は、このHTTP確認と分けて判定します。
+デスクトップ認証を使う場合、APIに`OAUTH_ALLOW_NATIVE_LOOPBACK=true`を設定します。既存の`OAUTH_REDIRECT_URIS`は維持し、ネイティブの戻り先は`127.0.0.1`と`/callback`を固定してポートだけ変えます。
 
 ## 起動設定
 
-APIは`node dist/main.js`、workerは`node dist/worker-main.js`で起動します。どちらも同じDBを使います。DBへの接続情報はRenderの秘密設定で渡し、リポジトリや会話には保存しません。
+APIは`node dist/main.js`で起動します。MCP、Webアプリ、通知の配送を1つのプロセスで扱います。DBへの接続情報はRenderの秘密設定で渡し、リポジトリや会話には保存しません。
 
-APIとworkerの公開前処理で`node dist/migrate.js`を実行し、新規DBの初期スキーマを用意します。管理操作は`node dist/admin.js`を使います。本番イメージには開発用の`tsx`を含めません。管理操作の出力先`/app/.local`と、Renderの管理用SSHに必要な`/home/node/.ssh`を実行ユーザーの所有で作成し、権限を`0700`にします。
+公開前処理で`node dist/migrate.js`を実行します。管理操作は`node dist/admin.js`を使います。本番イメージには開発用の`tsx`を含めません。管理操作の出力先`/app/.local`と、Renderの管理用SSHに必要な`/home/node/.ssh`を実行ユーザーの所有で作成し、権限を`0700`にします。
 
-API作成後に発行されたURLを確認し、APIとworkerの両方に`ALLOWED_HOSTS`と`OAUTH_ISSUER`を環境変数として直接設定します。起動コマンドでシェルの引用符や変数展開に依存しません。通知設定を渡して起動しますが、対象エージェントの接続と通信許可を登録するまでは配送対象を作りません。
+| 環境変数 | 値 |
+| --- | --- |
+| `ALLOWED_HOSTS` | `anybots-api.onrender.com` |
+| `OAUTH_ISSUER` | `https://anybots-api.onrender.com` |
+| `APP_ORIGIN` | `https://anybots-api.onrender.com`（`ALLOWED_HOSTS`に含まれること） |
+| `TRUST_PROXY_HOPS` | `1`（Renderのプロキシ1段。実際の段数は未検証） |
+| `NOTIFICATIONS_ENABLED` | `true` |
+| `NOTIFICATION_ENCRYPTION_KEY` | 32バイトの乱数の16進表記。作り直さない（Grok Webhookの復号にも使う） |
+| `WEBHOOK_ALLOWED_HOSTS` | `api2.cursor.sh,connectors.api.openai.com` |
+| `GROK_EXPERIMENTAL` | `true` |
+| `NOTIFICATION_DAILY_LIMIT`／`NOTIFICATION_MONTHLY_LIMIT` | `200`／`2000` |
 
-`ALLOWED_HOSTS`と`OAUTH_ISSUER`には、実際に発行されたAPIのホスト名とHTTPSのURLを設定します。OAuthの戻り先は、接続するクライアントに必要な完全一致のURLだけを許可します。設定方法は[OAuthの接続手順](oauth.md)に従います。
+起動コマンドでシェルの引用符や変数展開に依存しません。OAuthの戻り先は、接続するクライアントに必要な完全一致のURLだけを許可します。設定方法は[OAuthの接続手順](oauth.md)に従います。
 
-通知を有効にする際は、APIとworkerで同じ`NOTIFICATION_ENCRYPTION_KEY`を使います。値は32バイトの乱数を16進表記したものとし、再起動のたびに作り直しません。`WEBHOOK_ALLOWED_HOSTS`には確認済みの通知先ホストだけを登録します。
+`connectors.api.openai.com`は2026年10月3日の実アカウント検証でChatGPTが指定したホストです。根拠は[通知先の診断](callback-diagnostics.md)に記録しています。他の環境で同じ通知先になるとは仮定しません。
 
-2026年10月3日の実アカウント検証では、ChatGPTが指定した`connectors.api.openai.com`を確認しました。この環境のAPIとworkerには`WEBHOOK_ALLOWED_HOSTS=api2.cursor.sh,connectors.api.openai.com`を設定します。ホスト確認の根拠は[通知先の診断](callback-diagnostics.md)に記録しています。他の環境で同じ通知先になるとは仮定せず、実際の要求を確認してください。
-
-GrokのWebhookは引き続き実験扱いです。発行されたURLとキーを秘密ファイルへ保存し、`GROK_CONFIG_FILE`で参照します。実際のOAuth接続と通信許可を確認した後で、`GROK_EXPERIMENTAL`を有効にします。dotsの通知先は購読時に提供されるため、利用者に通知URLをチャットへ貼ってもらう手順にはしません。
-
-この環境では、利用者が保存したGrok用のJSONを、APIとworkerそれぞれのRender Secret File `grok-webhook.json`に登録します。`GROK_CONFIG_FILE=/etc/secrets/grok-webhook.json`と`GROK_EXPERIMENTAL=true`を設定し、両方を再デプロイします。登録前に対象の接続ID、通知先のホストとパス、キーの形式を検査します。値をチャットやGitへ出力せず、登録後は内容の一致と稼働中の設定を確認します。設定済みの表示だけでは、Grokが通知を受理したことや、自動返信できたことを証明しません。
+GrokのWebhookは引き続き実験扱いです。URLとキーは利用者がWebアプリで登録し、DBに暗号化して保存されます。Render Secret Fileや`GROK_CONFIG_FILE`は使いません。dotsの通知先は購読時に提供されるため、利用者に通知URLをチャットへ貼ってもらう手順にはしません。設定済みの表示だけでは、Grokが通知を受理したことや、自動返信できたことを証明しません。
 
 ## 完了条件
 

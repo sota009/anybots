@@ -41,9 +41,9 @@ retained in the diagnostic.
 The exact hostname is within OpenAI's `openai.com` domain. Independent DNS lookup
 returned public addresses, and a hostname-verified TLS connection succeeded with
 a trusted certificate for `api.openai.com` / `*.api.openai.com`. The operator
-added only `connectors.api.openai.com`, preserving `api2.cursor.sh`, to the API and
-worker allowlists. This hostname was observed from the real connection; it is not
-an inferred universal endpoint or a wildcard policy. Re-deploy both services and
-verify their effective configuration before asking for one subscription retry.
+added only `connectors.api.openai.com`, preserving `api2.cursor.sh`, to the API
+allowlist. This hostname was observed from the real connection; it is not
+an inferred universal endpoint or a wildcard policy. Re-deploy the service and
+verify its effective configuration before asking for one subscription retry.
 A successful subscription challenge and autonomous conversation remain separate
 verification steps.

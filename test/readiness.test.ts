@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { admin } from '../src/admin.js';
 import { Relay } from '../src/relay.js';
-import { createOwner, provision, testDatabase } from './helpers.js';
+import { createOwner, provision, setGrokWebhook, testDatabase } from './helpers.js';
 
 const resource = 'https://relay.example.test/mcp';
 const inspect = async (...args: Parameters<typeof import('../src/readiness.js').readiness>) =>
@@ -20,13 +20,12 @@ describe('operator onboarding status over real Postgres', () => {
   });
 
   it('delegates status to the operator reader without changing or completing a connection', async () => {
-    const result = await admin(relay, { action: 'status', bindingId: a.bindingId }, '.local', undefined,
-      input => inspect(db.pool, input));
+    const result = await admin({ relay, readStatus: input => inspect(db.pool, input) }, { action: 'status', bindingId: a.bindingId });
     expect(result).toMatchObject({ binding: { exists: true, active: true, provider: 'dots' },
       oauth: { configured: false, activeFamilies: 0 }, peer: null, liveVerification: 'not_verified' });
     expect(await relay.authenticate(a.token)).toMatchObject({ id: a.bindingId });
     expect((await db.pool.query('SELECT count(*)::int AS n FROM oauth_pairings')).rows[0].n).toBe(0);
-    await expect(admin(relay, { action: 'status', bindingId: a.bindingId })).rejects.toThrow();
+    await expect(admin({ relay }, { action: 'status', bindingId: a.bindingId })).rejects.toThrow();
   });
 
   it('limits counters to the requested pair and returns no message, identity, or credential values', async () => {
@@ -86,15 +85,14 @@ describe('operator onboarding status over real Postgres', () => {
   });
 
   it('reports only configuration evidence for Grok without emitting webhook credentials', async () => {
-    const options = { notifications: { grokExperimental: true,
-      groks: { [b.bindingId]: { url: 'https://api2.cursor.sh/automations/webhook/private-hook', secret: 'private-hook-secret' } } } };
+    const options = { notifications: { grokExperimental: true } };
+    expect((await inspect(db.pool, { bindingId: b.bindingId }, options)).notification.webhookConfigured).toBe(false);
+    await setGrokWebhook(db.pool, b.bindingId, randomBytes(32), 'https://api2.cursor.sh/automations/webhook/private-hook', 'private-hook-secret');
     const result = await inspect(db.pool, { bindingId: b.bindingId }, options);
     expect(result.notification).toEqual({ configured: true, experimentalEnabled: true, webhookConfigured: true });
     expect(result.oauth.activeFamilies).toBe(0);
     expect(result.liveVerification).toBe('not_verified');
     expect(JSON.stringify(result)).not.toMatch(/private-|cursor|secret|https:/);
-    options.notifications.groks[b.bindingId]!.url = 'https://unapproved.example.test/hook';
-    expect((await inspect(db.pool, { bindingId: b.bindingId }, options)).notification.webhookConfigured).toBe(false);
   });
 
   it('distinguishes missing bindings and rejects invalid or self peer selection', async () => {
