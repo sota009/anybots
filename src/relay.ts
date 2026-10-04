@@ -114,7 +114,7 @@ export class Relay {
     return this.run(async client => {
       await this.requirePair(client, a, b, false);
       const pair = [a, b].sort();
-      await client.query("INSERT INTO grants(binding_a,binding_b) VALUES($1,$2) ON CONFLICT(binding_a,binding_b) DO UPDATE SET status='active'", pair);
+      await client.query("INSERT INTO grants(binding_a,binding_b,status) VALUES($1,$2,'active') ON CONFLICT(binding_a,binding_b) DO UPDATE SET status='active'", pair);
     });
   }
 

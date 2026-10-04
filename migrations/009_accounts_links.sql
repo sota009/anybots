@@ -63,9 +63,11 @@ CREATE TABLE web_rates (bucket text PRIMARY KEY, hits integer NOT NULL, expires_
 ALTER TABLE bindings ADD COLUMN display_name text NOT NULL DEFAULT '' CHECK(char_length(display_name) <= 64);
 ALTER TABLE bindings ADD COLUMN webhook_encrypted text;
 
+ALTER TABLE grants ADD COLUMN status text NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed','active','revoked'));
+-- A revoked permission must never come back as active.
+UPDATE grants SET status = CASE WHEN active THEN 'active' ELSE 'revoked' END;
 ALTER TABLE grants DROP COLUMN active;
 ALTER TABLE grants ADD COLUMN id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid();
-ALTER TABLE grants ADD COLUMN status text NOT NULL DEFAULT 'active' CHECK(status IN ('proposed','active','revoked'));
 ALTER TABLE grants ADD COLUMN active boolean GENERATED ALWAYS AS (status = 'active') STORED;
 ALTER TABLE grants ADD COLUMN proposed_by uuid REFERENCES owners(id);
 ALTER TABLE grants ADD COLUMN policy_a jsonb NOT NULL DEFAULT '{"ask":"auto","coordinate":"auto","act":"approve","daily_limit":100}';
