@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Relay } from '../src/relay.js';
-import { dispatchOne, notificationBudgetWindows } from '../src/worker.js';
+import { dispatchOne, notificationBudgetWindows } from '../src/dispatch.js';
 import { createOwner, provision, testDatabase } from './helpers.js';
 import { notificationBudgetOptions } from '../src/notification-budget.js';
 

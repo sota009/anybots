@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { lockRelay, withTransaction } from './db.js';
 import { RelayError } from './errors.js';
+import { INBOX_CHANNEL, OUTBOX_CHANNEL, type Signals } from './signals.js';
 export { RelayError } from './errors.js';
 
 export type Binding = { id: string; ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; oauthFamilyId?: string };
@@ -14,12 +15,17 @@ const uuid = z.uuid();
 const key = z.string().min(1).max(128);
 const body = z.string().min(1).refine(text => Buffer.byteLength(text, 'utf8') <= 16384);
 const openSchema = z.object({ recipientBindingId: uuid, text: body, expectsReply: z.boolean(), idempotencyKey: key }).strict();
+const MAX_WAIT_S = 25;
+const waitS = z.number().int().min(0).max(MAX_WAIT_S);
+const claimSchema = z.object({ conversationId: uuid.optional(), waitS: waitS.optional() }).strict();
 const finishSchema = z.object({ turnId: uuid, result: z.enum(['replied', 'no_reply', 'blocked', 'declined']), text: body.optional(), expectsReply: z.boolean().optional(), idempotencyKey: key }).strict().superRefine((value, ctx) => {
   if ((value.result === 'replied') !== (value.text !== undefined) || (value.result !== 'replied' && value.expectsReply !== undefined)) ctx.addIssue({ code: 'custom', message: 'Only replied results have text and expectsReply' });
 });
 export type OpenInput = z.infer<typeof openSchema>;
-export type FinishInput = z.infer<typeof finishSchema>;
+export type FinishInput = z.infer<typeof finishSchema> & { next?: { waitS?: number } };
+export type ClaimInput = z.infer<typeof claimSchema>;
 export type FinishResult = { turnId: string; result: FinishInput['result']; messageId?: string };
+export type Claim = { turnId: string; conversationId: string; epoch: number; leaseExpiresAt: Date; message: Message };
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -28,7 +34,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 export class Relay {
-  constructor(private readonly pool: Pool, private readonly options: { oauthResource?: string } = {}) {}
+  constructor(private readonly pool: Pool, private readonly options: { oauthResource?: string; signals?: Signals } = {}) {}
 
   // Expiry persists even when the triggering request is rejected. The savepoint
   // prevents a rejected command from committing any partial operation writes.
@@ -152,6 +158,8 @@ export class Relay {
     await client.query(`INSERT INTO outbox(id,message_id,conversation_id,binding_id,epoch,status)
       SELECT $1,$2,$3,id,$5,CASE WHEN provider='muse' THEN 'not_required' ELSE 'pending' END
       FROM bindings WHERE id=$4`, [randomUUID(), id, c.id, recipient, c.epoch]);
+    // Delivered only on commit; listeners treat it as a hint and re-check.
+    await client.query(`SELECT pg_notify('${INBOX_CHANNEL}',$1), pg_notify('${OUTBOX_CHANNEL}','')`, [recipient]);
     return id;
   }
 
@@ -188,14 +196,34 @@ export class Relay {
     });
   }
 
-  async inboxClaim(token: string, input: { conversationId?: string } = {}) {
-    const data = parse(z.object({ conversationId: uuid.optional() }).strict(), input);
+  /**
+   * With waitS, the waiter is registered before each claim attempt so an
+   * arrival committed in between is not missed. Waiting holds no pool slot.
+   */
+  async inboxClaim(token: string, input: ClaimInput = {}): Promise<Claim | null> {
+    const data = parse(claimSchema, input);
+    const signals = this.options.signals;
+    if (!data.waitS || !signals) return this.claimOnce(token, data.conversationId);
+    const me = await this.authenticate(token);
+    const deadline = Date.now() + data.waitS * 1000;
+    for (;;) {
+      const waiter = signals.tryWait(me.id);
+      try {
+        const claim = await this.claimOnce(token, data.conversationId);
+        if (claim || !waiter) return claim;
+        const left = deadline - Date.now();
+        if (left <= 0 || !await waiter.wait(left)) return null;
+      } finally { waiter?.dispose(); }
+    }
+  }
+
+  private claimOnce(token: string, conversationId?: string): Promise<Claim | null> {
     return this.run(async client => {
       const me = await this.auth(client, token);
       const busy = await client.query("SELECT 1 FROM turns t JOIN bindings b ON b.id=t.binding_id WHERE b.runtime_scope=$1 AND t.status IN ('active','uncertain')", [me.runtimeScope]);
       if (busy.rowCount) return null;
-      if (data.conversationId) await this.conversation(client, me, data.conversationId);
-      const candidate = await client.query<{ id: string; conversation_id: string }>(`SELECT m.id,m.conversation_id FROM messages m JOIN conversations c ON c.id=m.conversation_id JOIN grants g ON g.binding_a=LEAST(c.binding_a,c.binding_b) AND g.binding_b=GREATEST(c.binding_a,c.binding_b) JOIN bindings peer ON peer.id=m.sender_binding_id WHERE m.recipient_binding_id=$1 AND c.status='open' AND g.active AND peer.active AND NOT EXISTS(SELECT 1 FROM turns t WHERE t.input_message_id=m.id) AND ($2::uuid IS NULL OR c.id=$2) ORDER BY m.created_at,m.sequence LIMIT 1`, [me.id, data.conversationId ?? null]);
+      if (conversationId) await this.conversation(client, me, conversationId);
+      const candidate = await client.query<{ id: string; conversation_id: string }>(`SELECT m.id,m.conversation_id FROM messages m JOIN conversations c ON c.id=m.conversation_id JOIN grants g ON g.binding_a=LEAST(c.binding_a,c.binding_b) AND g.binding_b=GREATEST(c.binding_a,c.binding_b) JOIN bindings peer ON peer.id=m.sender_binding_id WHERE m.recipient_binding_id=$1 AND c.status='open' AND g.active AND peer.active AND NOT EXISTS(SELECT 1 FROM turns t WHERE t.input_message_id=m.id) AND ($2::uuid IS NULL OR c.id=$2) ORDER BY m.created_at,m.sequence LIMIT 1`, [me.id, conversationId ?? null]);
       if (!candidate.rows[0]) return null;
       const row = candidate.rows[0];
       const c = await this.conversation(client, me, row.conversation_id, true);
@@ -208,7 +236,16 @@ export class Relay {
     });
   }
 
-  async turnFinish(token: string, input: FinishInput) {
+  /** `next` claims the following input in the same call; it is not part of the idempotent request. */
+  async turnFinish(token: string, input: FinishInput): Promise<FinishResult & { next?: Claim | null }> {
+    const { next, ...rest } = input;
+    const wait = next === undefined ? undefined : parse(z.object({ waitS: waitS.optional() }).strict(), next);
+    const result = await this.finish(token, rest);
+    if (!wait) return result;
+    return { ...result, next: await this.inboxClaim(token, wait.waitS === undefined ? {} : { waitS: wait.waitS }) };
+  }
+
+  private async finish(token: string, input: Omit<FinishInput, 'next'>) {
     const data = parse(finishSchema, input);
     return this.run(async client => {
       const me = await this.auth(client, token);

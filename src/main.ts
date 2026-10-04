@@ -4,6 +4,10 @@ import { Relay } from './relay.js';
 import { EventSubscriptions } from './events.js';
 import { notificationOptions } from './config.js';
 import { oauthFromEnvironment } from './oauth-config.js';
+import { Signals } from './signals.js';
+import { Dispatcher } from './dispatch.js';
+import { ProviderDispatcher } from './providers/index.js';
+import { notificationBudgetOptions } from './notification-budget.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL is required');
@@ -35,7 +39,14 @@ if (directoryEnabled) {
     }),
   };
 }
-const app = buildApp(new Relay(pool, oauth ? { oauthResource: oauth.resource } : {}), {
+const signals = new Signals(pool);
+await signals.start();
+const dispatcher = notifications ? new Dispatcher(pool, new ProviderDispatcher(pool, notifications), {
+  budget: notificationBudgetOptions(), signals,
+  // Never log provider payloads, URLs, authorization, or database errors.
+  onError: () => console.error('Notification dispatch unavailable; check database health.'),
+}) : undefined;
+const app = buildApp(new Relay(pool, { signals, ...(oauth ? { oauthResource: oauth.resource } : {}) }), {
   onEventDiagnostic: diagnostic => console.log(JSON.stringify(diagnostic)),
   ...(allowedHosts ? { allowedHosts } : {}),
   ...(notifications ? { events: new EventSubscriptions(pool, notifications) } : {}),
@@ -43,6 +54,8 @@ const app = buildApp(new Relay(pool, oauth ? { oauthResource: oauth.resource } :
   ...(directory ? { directory } : {}),
 });
 app.addHook('onClose', async () => {
+  await dispatcher?.stop();
+  await signals.stop();
   await pool.end();
   if (directory) await directory.pool.end();
 });
@@ -50,4 +63,5 @@ const shutdown = () => { void app.close().catch(() => { process.exitCode = 1; })
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 await app.listen({ host, port: Number(process.env.PORT ?? '3000') });
+dispatcher?.start();
 console.log('Anybots listening. Live provider verification is still required.');

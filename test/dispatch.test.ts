@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { Relay } from '../src/relay.js';
-import { dispatchOne } from '../src/worker.js';
+import { dispatchOne } from '../src/dispatch.js';
 import { createOwner, provision, testDatabase } from './helpers.js';
 import { ProviderDispatcher, type Notification, type DeliveryResult } from '../src/providers/index.js';
 import pg from 'pg';
@@ -30,7 +30,7 @@ it('records receipt separately from replies and never sends message content', as
   expect(await dispatchOne(db.pool, { deliver: async () => { throw new Error('no more sends'); } })).toBe(false);
 });
 
-it('serializes stop after a started send and cancels sends when stop wins', async () => {
+it('does not block a stop during a send, and the late hint cannot leak the body', async () => {
   let release!: () => void, started!: () => void;
   const start = new Promise<void>((r) => { started = r; });
   const barrier = new Promise<void>((r) => { release = r; });
@@ -38,16 +38,23 @@ it('serializes stop after a started send and cancels sends when stop wins', asyn
   await start;
   // Attempt intent is durable before the network can finish.
   expect((await db.pool.query('SELECT status FROM outbox WHERE message_id=$1', [conversation.messageId])).rows[0].status).toBe('uncertain');
-  let stopped = false;
-  const close = relay.conversationClose(a.token, { conversationId: conversation.conversationId }).then(() => { stopped = true; });
-  await new Promise((r) => setTimeout(r, 20));
-  expect(stopped).toBe(false);
-  release(); await sending; await close;
+  await relay.conversationClose(a.token, { conversationId: conversation.conversationId });
+  release(); await sending;
+  expect(await relay.inboxClaim(b.token)).toBeNull();
   expect(await dispatchOne(db.pool, { deliver: async () => { throw new Error('must not send'); } })).toBe(false);
 
   const next = await relay.conversationOpen(a.token, { recipientBindingId: b.bindingId, text: 'second', expectsReply: true, idempotencyKey: 'second' });
   await relay.conversationClose(b.token, { conversationId: next.conversationId });
   expect(await dispatchOne(db.pool, { deliver: async () => { throw new Error('must not send'); } })).toBe(false);
+});
+
+it('releases the pool slot while sending', async () => {
+  const pool = new pg.Pool({ ...db.pool.options, max: 1 });
+  try {
+    let inside = 0;
+    await dispatchOne(pool, { deliver: async () => { inside = (await pool.query('SELECT 1 AS one')).rows[0].one; return { status: 'accepted' }; } });
+    expect(inside).toBe(1);
+  } finally { await pool.end(); }
 });
 
 it('keeps ambiguous failures uncertain after worker restart', async () => {
@@ -89,7 +96,7 @@ it('fails permanently when historical attempts already exceed the global budget'
   expect(row).toEqual({ status: 'failed', last_error: 'budget_exceeded', attempts: 0 });
 });
 
-it('uses the held database connection during dispatch even with a single pool slot', async () => {
+it('records configuration_required for an unconfigured provider with a single pool slot', async () => {
   await db.pool.query("UPDATE outbox SET status='cancelled' WHERE status='pending'");
   await relay.conversationOpen(b.token, { recipientBindingId: a.bindingId, text: 'toward dots', expectsReply: true, idempotencyKey: 'dots-direction' });
   const pool = new pg.Pool({ ...db.pool.options, max: 1 });

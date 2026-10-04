@@ -11,7 +11,7 @@ import { EventSubscriptions } from '../src/events.js';
 import { ProviderDispatcher } from '../src/providers/index.js';
 import { readiness } from '../src/readiness.js';
 import { Relay } from '../src/relay.js';
-import { dispatchOne } from '../src/worker.js';
+import { dispatchOne } from '../src/dispatch.js';
 import { createOwner, provision, testDatabase } from './helpers.js';
 
 let db: Awaited<ReturnType<typeof testDatabase>>;

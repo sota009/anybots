@@ -19,7 +19,6 @@
     "admin": "tsx src/admin.ts",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
-    "worker": "node dist/worker-main.js",
     "admin:remote": "node scripts/remote-admin.mjs",
     "cli": "tsx src/cli.ts"
   },

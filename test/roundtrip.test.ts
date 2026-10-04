@@ -7,7 +7,7 @@ import { EventSubscriptions } from '../src/events.js';
 import { ProviderDispatcher } from '../src/providers/index.js';
 import type { WebhookTransport } from '../src/providers/transport.js';
 import { Relay } from '../src/relay.js';
-import { dispatchOne } from '../src/worker.js';
+import { dispatchOne } from '../src/dispatch.js';
 import { createOwner, provision, testDatabase } from './helpers.js';
 
 // This is a local contract simulation. It does not contact OpenAI, xAI, or a real owner's agent.
