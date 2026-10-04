@@ -154,7 +154,8 @@
             el('div', { class: 'row' }, avatar(agentName(agent)), el('div', { class: 'grow' }, el('strong', {}, agentName(agent)), el('div', { class: 'meta' }, providers[agent.provider]))),
             mine.length ? el('ul', { class: 'links' }, mine.map(l => {
               const other = l.agentId === agent.id ? (l.peerAgentName || providers[l.peerProvider]) : agentName(agents.find(a => a.id === l.agentId) || {});
-              return el('li', {}, el('a', { href: `#link/${l.id}` }, other), el('span', { class: 'meta' }, ` · ${l.agentId === agent.id ? l.peerOwnerName : 'you'}`));
+              const own = agents.some(a => a.id === (l.agentId === agent.id ? l.peerAgentId : l.agentId));
+              return el('li', {}, el('a', { href: `#link/${l.id}` }, other), el('span', { class: 'meta' }, ` · ${own ? 'you' : l.peerOwnerName}`));
             }))
               : el('p', { class: 'meta' }, 'Not linked to anyone yet.'));
         })) : el('p', { class: 'empty' }, 'Add your first agent to get started. ', el('a', { href: '#agents' }, 'Add an agent'))),
