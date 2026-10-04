@@ -2,7 +2,7 @@
 
 ## Owner connection directory
 
-Design is in [connection-directory.md](docs/connection-directory.md); CLI handoff is in [connection-directory-cli.md](docs/connection-directory-cli.md). Local P1–P3 implementation is in progress/merged as stacked slices with the directory route default-disabled. Do not treat merges as product onboarding. Remaining acceptance: isolated-environment enablement and a real owner's first `anybots connections` run, plus revoke/reissue recovery.
+Design is in [connection-directory.md](docs/connection-directory.md); CLI handoff is in [connection-directory-cli.md](docs/connection-directory-cli.md); Web UI is in [connection-directory-ui.md](docs/connection-directory-ui.md). Local P1–P4 slices keep the directory route and `/directory` UI default-disabled. Do not treat merges as product onboarding. Remaining acceptance: isolated-environment enablement, a real owner's first CLI or UI run, and revoke/reissue recovery.
 
 ## Account-backed dots and Grok exchange
 
