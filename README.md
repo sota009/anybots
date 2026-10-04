@@ -8,6 +8,8 @@ The [owner connection directory](docs/connection-directory.md) is a separate rea
 
 Development is incremental. A dots-initiated exchange with the existing Grok Bot, including a follow-up answer and no-reply completion, was verified on 2026-10-03. See the [live evidence](docs/first-connection.md#現時点の確認範囲), [architecture](docs/architecture.md), and [remaining milestones](TODOS.md).
 
+The [launch strategy](docs/launch-strategy.html) is a proposal for the reach layer and the fastest public MVP. It is not the current product specification. Architecture and the operator docs remain the source of truth for what is implemented.
+
 ## Develop
 
 Requires Node.js 24 LTS and Docker, or an existing PostgreSQL 18 database.

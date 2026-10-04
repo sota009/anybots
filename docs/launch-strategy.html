@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anybots ローンチ戦略 — 到達層の最速MVP</title>
+<style>
+  :root {
+    --ink: #1b1914;
+    --muted: #5e584e;
+    --line: #e2d8c8;
+    --paper: #f6f1e7;
+    --card: #fffdf8;
+    --keep: #1e4d38;
+    --keep-bg: #e7f2eb;
+    --cut: #8f2d14;
+    --cut-bg: #fde8e1;
+    --change: #8a4b08;
+    --change-bg: #fff1d6;
+    --accent: #c4511a;
+    --dark: #1b1914;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", "Helvetica Neue", sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px 80px; }
+  header.hero {
+    background: var(--dark);
+    color: #f6f1e7;
+    padding: 48px 0 36px;
+  }
+  header.hero .wrap { padding-bottom: 0; }
+  .kicker {
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: #e7b498;
+    margin: 0 0 12px;
+  }
+  h1 {
+    font-family: "Iowan Old Style", Palatino, "Yu Mincho", "Hiragino Mincho ProN", serif;
+    font-weight: 600;
+    font-size: clamp(32px, 5vw, 52px);
+    line-height: 1.15;
+    margin: 0 0 16px;
+    letter-spacing: -0.02em;
+  }
+  .lede { font-size: 18px; max-width: 42em; color: #f0e6d6; margin: 0; }
+  .banner {
+    margin-top: 28px;
+    border-top: 1px solid #3a342c;
+    padding: 14px 0 0;
+    color: #cfc4b2;
+    font-size: 14px;
+  }
+  nav.toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+  nav.toc a { text-decoration: none; }
+  h2 {
+    font-family: "Iowan Old Style", Palatino, "Yu Mincho", serif;
+    font-size: 30px;
+    line-height: 1.25;
+    margin: 48px 0 12px;
+  }
+  h3 { font-size: 18px; margin: 28px 0 8px; }
+  p { margin: 0 0 12px; }
+  .verdict {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin: 20px 0 8px;
+  }
+  .verdict article, .card, .case, .phase {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 16px 14px;
+  }
+  .verdict strong { display: block; font-size: 13px; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+  .verdict span { display: block; margin-top: 6px; font-size: 18px; line-height: 1.4; }
+  .stack {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin: 16px 0;
+  }
+  .stack .cell {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    min-height: 132px;
+  }
+  .stack .cell.ours { background: #1b1914; color: #f6f1e7; border-color: #1b1914; }
+  .stack .who { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); }
+  .stack .ours .who { color: #e7b498; }
+  .stack h3 { margin: 6px 0; font-family: Palatino, "Yu Mincho", serif; font-size: 22px; }
+  .cases { display: grid; gap: 12px; }
+  .case header { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .case h3 { margin: 0; }
+  .tag {
+    font-size: 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; margin: 12px 0 20px; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 8px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+  .marks { display: grid; gap: 10px; }
+  .mark { border-radius: 14px; padding: 14px 16px; }
+  .mark.keep { background: var(--keep-bg); }
+  .mark.cut { background: var(--cut-bg); }
+  .mark.change { background: var(--change-bg); }
+  .mark b { display: block; margin-bottom: 4px; }
+  .mark.keep b { color: var(--keep); }
+  .mark.cut b { color: var(--cut); }
+  .mark.change b { color: var(--change); }
+  ol.steps { padding-left: 0; list-style: none; counter-reset: step; }
+  ol.steps li {
+    counter-increment: step;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 14px 12px 58px;
+    margin: 0 0 8px;
+    position: relative;
+  }
+  ol.steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 14px;
+    top: 12px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--dark);
+    color: #f6f1e7;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+  }
+  .phases { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .phase .when { color: var(--muted); font-size: 13px; letter-spacing: 0.06em; }
+  .kill { border-left: 4px solid var(--cut); padding-left: 14px; }
+  footer.note { margin-top: 36px; color: var(--muted); font-size: 14px; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; }
+  @media (max-width: 720px) {
+    .verdict, .stack, .phases { grid-template-columns: 1fr; }
+    .case header { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">Anybots · 提案 · 2026-10-04</p>
+    <h1>到達を、最速で1回だけ届ける。</h1>
+    <p class="lede">Composio が行動、Supermemory が記憶を取ったあとに残る層は、自分が運営していないエージェントへ依頼を届けること。街や役所にエージェントがいる世界は、その層が不可逆だと示す物語。ローンチそのものは、その物語より狭い。</p>
+    <p class="banner">この文書は提案であり、実装済みの仕様ではない。現行の製品は README、docs/architecture.md、運営手順が正。数字は各社発表と二次記事が混在するので、出典節で信頼度を分けてある。</p>
+  </div>
+</header>
+
+<div class="wrap">
+<nav class="toc">
+  <a href="#call">判定</a>
+  <a href="#cases">事例</a>
+  <a href="#critique">批判</a>
+  <a href="#strategy">戦略</a>
+  <a href="#money">商売</a>
+  <a href="#mvp">最速MVP</a>
+  <a href="#order">順番</a>
+  <a href="#kill">中止条件</a>
+  <a href="#sources">出典</a>
+</nav>
+
+<section id="call">
+  <h2>判定</h2>
+  <div class="verdict">
+    <article>
+      <strong>残す</strong>
+      <span>カテゴリは到達。動詞は ask。供給は自分で置く。</span>
+    </article>
+    <article>
+      <strong>削る</strong>
+      <span>自治体営業、課金、標準化、リレーのOSS化は初回出荷に入れない。</span>
+    </article>
+    <article>
+      <strong>出荷の定義</strong>
+      <span>見知らぬ人が SSH なしで公開エージェントへ1回聞き、返事が画面に残る。</span>
+    </article>
+  </div>
+  <p>すでに証明できているのは、運営が結んだ dots と Grok の実アカウント往復（2026-10-03）と、実行中の Muse と Grok の往復（2026-10-04）。これはエンジンの証拠。公開製品の証拠にはまだなっていない。初回接続の記録では、Grok の通常チャットにやり取りが出なかった。画面に残らない成功は、ローンチでは成功に数えない。</p>
+</section>
+
+<section id="stack">
+  <h2>取る層</h2>
+  <p>人間がアプリと窓口のあいだを運ぶのが、戻ると壊れる変化。自分のエージェントは自分の道具と記憶まで届く。店、窓口、街頭は、それぞれの画面のまま残っている。次の相手を足すときに、また人間が貼り付け役に戻るのが損になったとき、この層は標準になる。</p>
+  <div class="stack">
+    <div class="cell">
+      <div class="who">行動 · 埋まっている</div>
+      <h3>Composio</h3>
+      <p>ユーザー単位の実行。アプリごとの OAuth を自分で書かなくなる。</p>
+    </div>
+    <div class="cell">
+      <div class="who">記憶 · 埋まっている</div>
+      <h3>Supermemory</h3>
+      <p>モデルの外の記憶。モデルを替えても相手を忘れない。</p>
+    </div>
+    <div class="cell ours">
+      <div class="who">到達 · ここ</div>
+      <h3>Anybots</h3>
+      <p>自分が運営していないエージェントへ、範囲つきで聞いて、返事を受け取る。</p>
+    </div>
+  </div>
+  <p>発見の住所は <a href="https://aid.agentcommunity.org/docs/specification">AID</a> の DNS に乗せる。会話の封筒を新しく作って A2A と並ばない。ツール実行を取りにいって Composio と並ばない。Anybots が運営するのは、その先の同意、起床、完了の記録。</p>
+</section>
+
+<section id="cases">
+  <h2>事例から盗む型</h2>
+  <p>Browser Use を中心に、インフラとして先に広がった製品の共通点は「名詞が1つ、見知らぬ人が数分で結果を見る、ホスト課金は自分で運用する苦痛に後から付く」。評価額は売上より先に動く。売上の前に物語を出してよいが、動く1呼び出しより先に物語を出すと嘘になる。</p>
+
+  <div class="cases">
+    <article class="case">
+      <header>
+        <h3>Browser Use</h3>
+        <span class="tag">オープンコア → 使った分だけ</span>
+      </header>
+      <p>週末の実験を Hacker News に出した、と創業者自身が書いている。ライブラリが先に広がり、資金調達の投稿時点で GitHub 星 50,000、開発者 15,000 以上。2025-03-23、TechCrunch が Felicis 主導のシード 1,700 万ドルを報じた。YC のクラウド発表では、OpenAI Operator の4日後にホスト版を出した、と自分たちで書いている。理由は、プロキシ、ログイン維持、並列実行を自分で抱えたくない利用者の要望。</p>
+      <p>現在の価格はサブスクリプションを置かず、5ドルからクレジット、期限なし。ブラウザ時間と通信、モデル代の20%を足す。登録者に15ドル分の無料クレジット。GetLatka の2025年ARR推計は140万ドルで、調達額より小さい。星は配布、請求はホストの苦痛、という分離が本体。</p>
+      <p><b>盗む。</b> 見知らぬ人が今日試せる1動詞。ホストするのは「相手のエージェントを起こして記録する」misery。ライブラリをばらまいて星を稼ぐこと自体は真似しない。同意ネットワークは相手がいないと価値がゼロで、Browser Use のライブラリとはそこが違う。</p>
+    </article>
+
+    <article class="case">
+      <header>
+        <h3>Browserbase / Stagehand</h3>
+        <span class="tag">SDKは無料、ブラウザは有料</span>
+      </header>
+      <p>2024年1月創業。2025年6月の Series B は Notable Capital 主導で4,000万ドル、評価額3億ドル、累計6,750万ドル、という二次報道がある。GetLatka 系の2025年ARRは440万ドル。Stagehand は <code>act / extract / observe</code> の3語で広がり、2026年8月に npm 月間578万ダウンロードというまとめがある。価格は無料、Developer 20ドル、Startup 99ドル、その後は時間と回数。</p>
+      <p>検索、取得、エージェント身元、モデルゲートウェイへ広げたのは、ブラウザという名詞が先に立ったあと。名詞を増やすのは配布のあと。</p>
+      <p><b>盗む。</b> 開発者が貼る入口と、信頼性に課金するホストを分ける。最初の名詞がデフォルトになる前に製品面を増やさない。</p>
+    </article>
+
+    <article class="case">
+      <header>
+        <h3>Composio</h3>
+        <span class="tag">開発者が先、監査が企業の理由</span>
+      </header>
+      <p>Together と Lightspeed の発表では、シード400万ドルのあとに Series A 2,500万ドル、累計2,900万ドル。その時点で開発者10万以上、企業200社以上、売上が7桁。2026年の同社資料では月間ツール呼び出し3億回以上、SOC 2 と ISO 27001、導入事例では自前 OAuth の約380時間を置き換えたと書いている。</p>
+      <p><b>盗む。</b> 企業が買う文章は「新しい世界」ではなく「この時間を自分で書かなくてよい」と「依頼の前に範囲が効き、記録が残る」。到達の企業向け証拠は、相手ごとに接続を書かずに済んだ時間と、誰が何を聞いたかの記録。</p>
+    </article>
+
+    <article class="case">
+      <header>
+        <h3>Supermemory</h3>
+        <span class="tag">触れる遊び場が、インフラの買い手を連れてくる</span>
+      </header>
+      <p>消費者向けのセカンドブレインから始まり、利用者5万、GitHub 星1万を自社ブログが記載。その運用の中で記憶の基盤が無いと気づき、API を売った。顧客に Composio、Cluely、Scira が入る。資金は同社ブログが300万ドル、TechCrunch（2025-10-06）が260万ドル。</p>
+      <p><b>盗む。</b> 最初に触れるのは API 仕様書ではなく、今聞ける公開エージェント。API はその同じ受信箱。消費者アプリを別に作らない。</p>
+    </article>
+
+    <article class="case">
+      <header>
+        <h3>Firecrawl</h3>
+        <span class="tag">退屈で難しい1呼び出し</span>
+      </header>
+      <p>URL を渡すと、エージェントが読める文章が返る。YC の求人は、1年目に ARR 8桁、2年目にその倍以上、GitHub 星17万以上、と自己申告している。2026年の同社ブログは Smash Capital 主導の Series B 7,500万ドル。無料クレジットのあと、ページと検索の回数で課金。後から Alexandria で複数の情報源を同じ API に足している。1呼び出しがデフォルトになったあとの拡張。</p>
+      <p><b>盗む。</b> <code>ask(住所, 範囲, 依頼)</code> を、URL を渡すのと同じ短さにする。複数の相手は、その1語の引数が増えるだけ。</p>
+    </article>
+
+    <article class="case">
+      <header>
+        <h3>Resend</h3>
+        <span class="tag">最初の客は知人。10ドルで本気か確かめた</span>
+      </header>
+      <p>同社の沿革では、2022年9月に動く MVP を知人のスタートアップが本番で使い、10ドルの支払いリンクで本気かを見た。React Email が配布の入口。2023年1月の公開から約半年で開発者1万、送信700万通（TechCrunch、2023-07）。2023年12月に有料顧客1,000。2024年4月に利用者10万。2024年12月に Series A 1,800万ドル。2025年に利用者100万、2026年6月に300万。創業者は SendGrid の次ではなく Twilio の次と言いながら、メールという名詞から動かなかった。</p>
+      <p><b>盗む。</b> 出荷の定義を満たしたあと、知人1人に少額を払ってもらう。Stripe を先に作らない。名詞を増やすローンチウィークは、最初の ask が外で成功してから。</p>
+    </article>
+  </div>
+
+  <h3>6社に共通していた順番</h3>
+  <table>
+    <thead>
+      <tr><th>順</th><th>やったこと</th><th>Anybots での対応</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>名詞を1つに固定する</td><td>到達。動詞は ask だけ</td></tr>
+      <tr><td>2</td><td>見知らぬ人が商談なしで結果を見る</td><td>公開の案内窓口へ1回聞き、ページに返事が残る</td></tr>
+      <tr><td>3</td><td>供給側を自分で種まきする</td><td>窓口と店のエージェントは自前で置く</td></tr>
+      <tr><td>4</td><td>無料の入口、有料は運用の苦痛</td><td>サンドボックスは無料。課金は起床・記録・検証済み住所</td></tr>
+      <tr><td>5</td><td>大きい顧客の物語は後</td><td>自治体は、公開窓口が何度も聞かれたあとの商品</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="critique">
+  <h2>戦略への批判</h2>
+  <p>前回までの「到達層、街にエージェントが宿る、人間が運搬係をやめる」は方向として維持する。それを初回ローンチの作業リストにすると、Browser Use がやらなかった失敗を自分から選ぶことになる。</p>
+  <div class="marks">
+    <div class="mark keep">
+      <b>維持する</b>
+      認証から送信者を決める。通知に本文を載せない。相手の文章を許可や購入にしない。結果不明を自動再送しない。dots、Grok、Muse の資格情報を混ぜない。この5つは、標準になったあとに必要になる性質で、すでに試作の中心にある。作り直さない。
+    </div>
+    <div class="mark cut">
+      <b>初回出荷から外す</b>
+      実在の自治体との接続。利用者同士の友達追加。グループ調整。Poke。音声。ファイル。決済。A2A 互換。リレー本体のオープンソース化。接続一覧 CLI の一般公開。課金システム。Muse をデモの主役にすること。Grok 発の新規会話は未検証のまま、デモの開始側は動いた経路に固定する。
+    </div>
+    <div class="mark change">
+      <b>読み替える</b>
+      「標準になる」は結果であって、ローンチの宣言ではない。2人目が同じ住所を叩き、3人目が自分のエージェントをその住所帳に載せたとき、標準の最初の証拠になる。それまでは参照実装。白井市の2026年4月の案内アバターは、来庁者がその場で話す画面の実例であり、外部から呼べる API が存在する証拠ではない。物語の比喩に使い、接続先の合意として扱わない。
+    </div>
+    <div class="mark cut">
+      <b>この戦略が簡単に死ぬ場所</b>
+      デモが「自分たちのボット同士の雑談」だと、到達の証拠にならない。個人のエージェントから、別の運営主体の公開エージェントへ聞けることが最低条件。公開エージェントの中身は自前でよい。聞く側が自前の運営手順だと、見知らぬ人の出荷にはならない。もう一つの死に方は、中継は成功して画面が無言のまま投稿すること。2026-10-03 の記録がすでにその穴を見せている。
+    </div>
+  </div>
+</section>
+
+<section id="strategy">
+  <h2>再設計した戦略</h2>
+  <h3>一文</h3>
+  <p>自分のエージェントから、入れていないアプリの窓口へ、許可した範囲だけ聞いて、返事が今いる画面に戻る。</p>
+  <h3>誰が最初の利用者か</h3>
+  <p>すでに dot か Grok を持っていて、運営の知人ではない1人。この人は市役所の職員でも、新しいアプリの登録者でもない。持っているエージェントに1文を貼る人。</p>
+  <h3>誰が最初の相手か</h3>
+  <p>自分たちでホストする2つの公開エージェント。案内窓口は「どの手続きの話か」に定型で答え、証明書は発行しない。角の店は「残っているか」に定型で答え、注文は受けない。副作用が無いので、バックアップと保存期限が未了の本番に、他人の私的な会話を載せずに公開できる。</p>
+  <h3>冷たいスタートの扱い</h3>
+  <p>最初は需要も供給も自分たちに見える。それは Browserbase がブラウザを自分で用意し、Composio がコネクタを自分で用意したのと同じ。次の関門だけがネットワークの証拠で、外部の誰かが3体目の住所を自分で公開できること。ローンチの完了条件には入れず、ローンチの次の関門として固定する。</p>
+  <h3>ハイプの単位</h3>
+  <p>図は、行動・記憶・到達の3マス。動画は60秒で、見知らぬ人のエージェントが案内窓口に聞き、ローンチページに返事が出るところまで。README もセキュリティモデルも投稿しない。英語の開発者向けには同じ動詞を併記する。日本語の比喩は白井の窓口でよいが、製品のプロンプトは住所と範囲が読めれば言語を選ばない。</p>
+</section>
+
+<section id="money">
+  <h2>ビジネスモデル</h2>
+  <p>課金対象はアイデアではなく、自分で持ちたくない運用。起床、相手ごとの接続、範囲の検査、監査の保存、検証済みの公開住所。本文の広告、会話の学習利用、関係グラフの販売は商品にしない。</p>
+  <div class="phases">
+    <article class="phase">
+      <div class="when">PHASE 0 · ローンチ</div>
+      <h3>無料、上限、売上ゼロ</h3>
+      <p>サンドボックスだけ。接続ごとの1日の完了回数を小さく固定する。目標は運営以外の完了した ask が20件。全体共通の実験上限（1日200通知）のまま投稿すると、当たった日に黙る。投稿の前にサンドボックスの枠を分離する。</p>
+    </article>
+    <article class="phase">
+      <div class="when">PHASE 1 · 動いたあと</div>
+      <h3>完了した ask のクレジット</h3>
+      <p>Browser Use と同じく席課金にしない。期限のない少額チャージ。起床に失敗した試行は請求しない。Resend に倣い、最初の外部成功のあと知人1人へ少額の支払いを依頼し、本気かを見る。その支払いリンクのために請求基盤を先に作らない。</p>
+    </article>
+    <article class="phase">
+      <div class="when">PHASE 2 · 場所が客になる</div>
+      <h3>検証済み住所の月額</h3>
+      <p>店と窓口が、自分のエージェント住所、監査の書き出し、到達の保証を買う。電話番号を買うのに近い。自治体はここの顧客。公開サンドボックスが何百回も聞かれたあとに売る。</p>
+    </article>
+    <article class="phase">
+      <div class="when">PHASE 3 · 統制</div>
+      <h3>記録と権限の分離</h3>
+      <p>Composio が SOC 2 のあとに売ったもの。範囲がモデルの前に効くこと、保存期間、組織の管理主体。バックアップ復旧、DB 権限分離、保存期限が証拠になってから。今のセキュリティ資料が公開拡大の前提にしている項目そのもの。</p>
+    </article>
+  </div>
+</section>
+
+<section id="mvp">
+  <h2>最速MVP</h2>
+  <p>新しいプロトコルは作らない。今の受信箱の上に、見知らぬ人が通れるドアを1枚足す。</p>
+  <table>
+    <thead>
+      <tr><th></th><th>中身</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>動詞</td><td><code>ask(住所, 範囲, 依頼)</code>。中では既存の会話開始と受信完了を使ってよい。利用者が見る名前は ask だけ。</td></tr>
+      <tr><td>住所</td><td><code>desk.demo</code> と <code>shop.demo</code>。名刺に、場所、答える範囲、しないことを書く。</td></tr>
+      <tr><td>入口</td><td>1つの URL。ブラウザで一度きりの接続。接続コードを AI との会話へ貼らせない。貼る依頼文は1つ。</td></tr>
+      <tr><td>表示</td><td>ローンチページに、依頼、返事、時刻が残る。本人の通常チャットに残ることも同時に直す。ページ側が欠けたら投稿しない。</td></tr>
+      <tr><td>境界</td><td>パイロット所有者の本番の許可とは別のサンドボックス。回答は定型で、外部の副作用が無い。私的な受信箱をこの公開面に混ぜない。</td></tr>
+      <tr><td>上限</td><td>接続ごとの完了回数。使い切りは黙って落ちず、理由を返す。</td></tr>
+    </tbody>
+  </table>
+  <h3>完了したと呼ぶ条件</h3>
+  <ol class="steps">
+    <li>運営ではない人が、ドキュメントの運営手順を読まずに URL を開く。</li>
+    <li>持っている dot または Grok に、書かれた1文を貼る。</li>
+    <li>案内窓口が範囲内の問いに答え、ローンチページにその返事が出る。</li>
+    <li>途中で運営が SSH、秘密ファイル、Webhook 鍵を触っていない。</li>
+    <li>別の2人目が、同じ住所へ同じ手順で聞ける。</li>
+  </ol>
+  <p>この5つが揃った動画が、最初の公開物。星の数、資金、自治体の関心は、この5つの代わりにならない。</p>
+</section>
+
+<section id="order">
+  <h2>実装の順番</h2>
+  <p>開発方針どおり、各段は資料、失敗するテスト、最小実装の順。カレンダーの週では切らない。</p>
+  <ol class="steps">
+    <li>この戦略を提案として固定する。現行仕様の文書は、実装が終わるまで書き換えない。</li>
+    <li>サンドボックスの境界を資料に書き、本番の許可や通知枠と混ざらないテストを先に落とす。</li>
+    <li>2体の公開エージェントと名刺。範囲外の依頼は実行せず拒否するテストを先に書く。</li>
+    <li>サンドボックス限定の自己接続。既存の一度きりのブラウザ接続を、運営の SSH なしでこの相手だけに使えるようにする。</li>
+    <li>ローンチページに、そのサンドボックスの受付記録だけを出す。本文の全会話ダンプにはしない。</li>
+    <li>運営以外の1人で完了条件を通し、操作回数と運営の介在を記録する。</li>
+    <li>2人目が同じ住所を叩けたら、60秒の動画を公開する。</li>
+    <li>外部の完了が20件に達してから、少額課金の実験を設計する。3人目が自分の住所を公開できることは、その次の関門。</li>
+  </ol>
+</section>
+
+<section id="kill">
+  <h2>中止条件</h2>
+  <div class="kill">
+    <p>見知らぬ人が運営の手を借りないと終わらないなら、機能を足すのを止め、入口だけを直す。</p>
+    <p>返事がローンチページに残らないなら、投稿しない。</p>
+    <p>公開エージェントが範囲外の依頼を実行したら、公開を閉じる。定型回答の外へ賢くする作業より、拒否が先。</p>
+    <p>サンドボックスの枠が全体の実験上限と共通のままなら、宣伝しない。</p>
+    <p>パイロットの私的な会話を、この公開ページの材料に使わない。</p>
+  </div>
+</section>
+
+<section id="measure">
+  <h2>見る数</h2>
+  <table>
+    <thead>
+      <tr><th>数</th><th>意味</th><th>目安</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>人間の操作</td><td>URL を開いてから返事まで</td><td>依頼文を1回貼る</td></tr>
+      <tr><td>運営の介在</td><td>SSH、鍵、Webhook、DB の操作</td><td>0</td></tr>
+      <tr><td>2人目</td><td>同じ住所を別人が完了</td><td>ローンチの証拠</td></tr>
+      <tr><td>外部の完了</td><td>運営以外の ask 完了</td><td>20件で課金実験へ</td></tr>
+      <tr><td>外部の供給</td><td>第三者が住所を公開</td><td>ローンチの次。ここが標準の芽</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="sources">
+  <h2>出典と信頼度</h2>
+  <table>
+    <thead>
+      <tr><th>主張</th><th>根拠</th><th>扱い</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Browser Use は短い実験を HN に出し、調達時に星5万。シード1,700万ドル</td><td><a href="https://browser-use.com/posts/seed-round">創業者の投稿</a>、<a href="https://techcrunch.com/2025/03/23/browser-use-the-tool-making-it-easier-for-ai-agents-to-navigate-websites-raises-17m/">TechCrunch 2025-03-23</a></td><td>一次に近い</td></tr>
+      <tr><td>Operator の4日後にホスト版</td><td><a href="https://www.ycombinator.com/launches/Mh9-browser-use-open-source-alternative-to-openai-operator">YC Launch</a></td><td>当事者の記述</td></tr>
+      <tr><td>クレジット課金、サブスクなし、15ドル分の無料</td><td><a href="https://browser-use.com/pricing">価格ページ</a>（参照日 2026-10-04）</td><td>現行の価格。変わりうる</td></tr>
+      <tr><td>Browser Use の2025年ARR約140万ドル</td><td><a href="https://getlatka.com/companies/browser-use.com">GetLatka</a></td><td>第三者推計。決算ではない</td></tr>
+      <tr><td>Browserbase Series B 4,000万ドル、評価3億ドル、累計6,750万ドル</td><td>2025-06の Techmeme 等の二次報道。価格は <a href="https://www.browserbase.com/pricing">現行価格</a></td><td>資金は報道。ARR 440万ドルは第三者推計</td></tr>
+      <tr><td>Composio 累計2,900万ドル、開発者10万、売上7桁</td><td><a href="https://www.together.fund/perspectives/insights/investing-in-composio-building-the-learning-layer-for-agentic-ai">Together</a>、<a href="https://lsvp.com/stories/investing-in-composio-building-the-backbone-of-ai-agent-intelligence/">Lightspeed</a></td><td>投資家発表。時点は Series A 発表時</td></tr>
+      <tr><td>月間3億回、380時間</td><td><a href="https://composio.dev/content/composio-enterprise-proof">Composio の事例ページ</a></td><td>当事者の営業資料</td></tr>
+      <tr><td>Supermemory の由来と資金</td><td><a href="https://supermemory.ai/blog/supermemory-raises-3-million-and-building-the-best-memory-engine-for-llms/">自社ブログ</a>、<a href="https://techcrunch.com/2025/10/06/a-19-year-old-nabs-backing-from-google-execs-for-his-ai-memory-startup-supermemory/">TechCrunch 2025-10-06</a></td><td>金額は300万と260万で食い違う。両方併記</td></tr>
+      <tr><td>Firecrawl の ARR と Series B 7,500万ドル</td><td><a href="https://www.ycombinator.com/companies/firecrawl/jobs/ZTKSCd6-open-source-engineer">YC 求人</a>、<a href="https://www.firecrawl.dev/blog/introducing-alexandria-series-b">自社ブログ</a></td><td>自己申告。監査済み売上ではない</td></tr>
+      <tr><td>Resend の利用者と資金の時系列</td><td><a href="https://www.resend.com/handbook/company/how-we-got-here">公式の沿革</a>、<a href="https://techcrunch.com/2023/07/18/developer-focused-email-platform-resend-raises-3m/">TechCrunch 2023-07-18</a></td><td>沿革は当事者。初期の通数は当時の報道</td></tr>
+      <tr><td>AID は資格も人間の承認も発行しない</td><td><a href="https://aid.agentcommunity.org/docs/specification">AID 仕様</a></td><td>仕様の自己記述</td></tr>
+      <tr><td>白井市の案内装置</td><td><a href="https://mainichi.jp/english/articles/20260423/p2a/00m/0sc/005000c">毎日新聞 2026-04-23</a></td><td>来庁者向け装置の報道。外部 API は未確認</td></tr>
+      <tr><td>Anybots の実往復</td><td>docs/first-connection.md、docs/muse-connection.md</td><td>このリポジトリの検証記録</td></tr>
+    </tbody>
+  </table>
+  <footer class="note">
+    提案の位置づけは 2026-10-04。実装状況が変わったら、この HTML の「現行仕様ではない」という但し書きを外す前に、architecture とセキュリティ資料を先に更新する。
+  </footer>
+</section>
+</div>
+</body>
+</html>
