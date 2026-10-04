@@ -8,7 +8,7 @@ import { ProviderDispatcher } from '../src/providers/index.js';
 import type { WebhookTransport } from '../src/providers/transport.js';
 import { Relay } from '../src/relay.js';
 import { dispatchOne } from '../src/dispatch.js';
-import { createOwner, provision, testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase, setGrokWebhook } from './helpers.js';
 
 // This is a local contract simulation. It does not contact OpenAI, xAI, or a real owner's agent.
 describe('local simulated dots/Grok multi-turn relay (not live-provider verification)', () => {
@@ -37,15 +37,13 @@ describe('local simulated dots/Grok multi-turn relay (not live-provider verifica
             return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
           }
           delivered.push({ url, body, headers });
-          // Acknowledge only. MCP processing starts after dispatchOne releases its ordering lock.
+          // Acknowledge only; the simulated agent acts after delivery.
           return { status: 202, body: '' };
         },
       };
       const events = new EventSubscriptions(db.pool, { encryptionKey, transport });
-      const dispatcher = new ProviderDispatcher(db.pool, {
-        encryptionKey, transport, grokExperimental: true,
-        groks: { [grok.bindingId]: { url: grokUrl, secret: grokSecret } },
-      });
+      await setGrokWebhook(db.pool, grok.bindingId, encryptionKey, grokUrl, grokSecret);
+      const dispatcher = new ProviderDispatcher(db.pool, { encryptionKey, transport, grokExperimental: true, webhookHosts: ['api2.cursor.sh'] });
       const app = buildApp(relay, { events });
       const address = await app.listen({ host: '127.0.0.1', port: 0 });
       const clients: Client[] = [];

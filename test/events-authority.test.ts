@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { EventSubscriptions, INBOX_EVENT, type EventAuthorization } from '../src/events.js';
 import { ProviderDispatcher, type Notification } from '../src/providers/index.js';
 import { lockRelay, withTransaction } from '../src/db.js';
-import { createOwner, testDatabase } from './helpers.js';
+import { createOwner, testDatabase, setGrokWebhook } from './helpers.js';
 
 describe('event subscriptions retain their connector authority', () => {
   let db: Awaited<ReturnType<typeof testDatabase>>; let pool: Pool;
@@ -119,14 +119,13 @@ describe('event subscriptions retain their connector authority', () => {
 
   it.each(['revoked', 'expired', 'resource_mismatch', 'wrong_scope', 'inactive_binding', 'missing_family'])('does not wake Grok after connector authority becomes %s', async state => {
     await pool.query("UPDATE bindings SET provider='grok' WHERE id=$1", [bindingId]);
+    await setGrokWebhook(pool, bindingId, encryptionKey, 'https://api2.cursor.sh/automations/webhook/test', 'test-only-webhook-key');
     const grokDispatcher = new ProviderDispatcher(pool, { encryptionKey, transport: { post }, grokExperimental: true,
-      oauthResource: 'https://relay.example.com/mcp', groks: { [bindingId]: {
-        url: 'https://api2.cursor.sh/automations/webhook/test', secret: 'test-only',
-      } } });
+      webhookHosts: ['api2.cursor.sh'], oauthResource: 'https://relay.example.com/mcp' });
     const wake = { ...notification(), provider: 'grok' as const };
     const client = await pool.connect();
     try {
-      expect(await grokDispatcher.deliver(wake, client)).toEqual({ status: 'accepted' });
+      expect(await grokDispatcher.deliver(wake)).toEqual({ status: 'accepted' });
       expect(post).toHaveBeenCalledTimes(1);
       if (state === 'revoked') await client.query('UPDATE oauth_families SET revoked=true WHERE id=$1', [familyId]);
       if (state === 'expired') await client.query("UPDATE oauth_families SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", [familyId]);
@@ -135,7 +134,7 @@ describe('event subscriptions retain their connector authority', () => {
       if (state === 'inactive_binding') await client.query('UPDATE bindings SET active=false WHERE id=$1', [bindingId]);
       if (state === 'missing_family') await client.query('DELETE FROM oauth_families WHERE id=$1', [familyId]);
       post.mockClear();
-      expect(await grokDispatcher.deliver(wake, client)).toEqual({ status: 'configuration_required' });
+      expect(await grokDispatcher.deliver(wake)).toEqual({ status: 'configuration_required' });
       expect(post).not.toHaveBeenCalled();
     } finally { client.release(); }
   });

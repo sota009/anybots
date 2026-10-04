@@ -1,13 +1,12 @@
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import type { ProviderOptions } from './providers/index.js';
-import { validateWebhookUrl } from './providers/transport.js';
 
 export interface ReadinessInput { bindingId: string; peerBindingId?: string }
 interface ReadinessOptions {
   oauthResource?: string;
   // Supplied by the operator's validated notification configuration, never HTTP input.
-  notifications?: Pick<ProviderOptions, 'groks' | 'grokExperimental'>;
+  notifications?: Pick<ProviderOptions, 'grokExperimental'>;
 }
 const selection = z.strictObject({ bindingId: z.uuid(), peerBindingId: z.uuid().optional() })
   .refine(input => input.bindingId !== input.peerBindingId, 'Peer must be a different binding');
@@ -28,8 +27,8 @@ export async function readiness(pool: Pool, input: ReadinessInput, options: Read
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const at = (await client.query<{ at: Date }>('SELECT clock_timestamp() AS at')).rows[0]!.at;
-    const found = (await client.query<{ active: boolean; provider: 'dots' | 'grok' | 'muse' }>(
-      'SELECT active,provider FROM bindings WHERE id=$1', [bindingId])).rows[0];
+    const found = (await client.query<{ active: boolean; provider: 'dots' | 'grok' | 'muse'; webhook: boolean }>(
+      'SELECT active,provider,webhook_encrypted IS NOT NULL AS webhook FROM bindings WHERE id=$1', [bindingId])).rows[0];
     const binding = { exists: Boolean(found), active: found?.active ?? false, provider: found?.provider ?? null };
     const activeFamilies = options.oauthResource && binding.active
       ? (await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM oauth_families
@@ -56,14 +55,7 @@ export async function readiness(pool: Pool, input: ReadinessInput, options: Read
           [bindingId, at, options.oauthResource ?? null])).rows[0]!.count : 0;
     } else if (binding.provider === 'grok') {
       notification.experimentalEnabled = options.notifications?.grokExperimental === true;
-      notification.webhookConfigured = false;
-      const config = options.notifications?.groks?.[bindingId];
-      if (config) {
-        try {
-          const url = validateWebhookUrl(config.url, ['api2.cursor.sh']);
-          notification.webhookConfigured = url.pathname.startsWith('/automations/webhook/') && !url.search;
-        } catch { /* Report only missing configuration, never the rejected URL. */ }
-      }
+      notification.webhookConfigured = found?.webhook ?? false;
     }
     const messages = (await client.query<{ sent: number; received: number }>(`SELECT
       count(*) FILTER (WHERE sender_binding_id=$1)::int AS sent,
