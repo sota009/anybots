@@ -12,11 +12,19 @@ MCPの接続先は`https://anybots-api.onrender.com/mcp`です。`/health`の200
 
 2026年10月4日、利用者了承のもと旧スキーマの本番DBを破棄して作り直した。旧データ（会話、OAuth状態）は保持しない。dots/Grok の再OAuthと実アカウント会話の再確認は未了。破棄前の会話成功は継続成功とは扱わない。一時的にDB外部IP許可を開いたため、DBパスワードのローテーションを推奨する。
 
-v0.2.0（Webアプリ、Link方針、API内配送）は、本番DBをmigration 009で更新し、workerを廃止して公開する。公開と確認の結果はこの節に追記する。追記がない間は未公開として扱う。
+同日、v0.2.0（Webアプリ、Link方針、API内配送）として、PR #29のマージコミット`7bec208`を公開した。公開前処理でmigration 009が成功したことを確認した。外部からの確認結果は次のとおり。
+
+- `/health`、`/app`、`/app/app.js`は200を返す。未認証の`/mcp`と`/api/v1/me`は401、削除した`/directory`は404を返す。
+- 期待するセキュリティヘッダー（HSTSを含む）が付く。`Origin`のない書き込みは403になる。ログイン開始はrpId `anybots-api.onrender.com`で200を返す。
+- `anybots-worker`は一時停止した。削除するかは利用者が判断する。
+- `DIRECTORY_*`と`GROK_CONFIG_FILE`を削除し、表の値を設定した。
+- `NOTIFICATION_ENCRYPTION_KEY`は値がツール出力に表示されたため作り直した。旧鍵で暗号化した購読秘密は使えないので、dotsは再OAuthの後に購読し直す。
+
+認証の試行制限は、外向きIPが1つに固定された環境から確認した。1分に20回を超えると429になる。`X-Forwarded-For`の値を毎回変えて送っても、制限を回避できない。`TRUST_PROXY_HOPS=3`では、毎回変わるプロキシのIPを数えてしまい、制限が効かなかった。`1`は、外向きIPが毎回変わる環境からしか試しておらず、未検証。dots/Grokの再OAuthと、実アカウントでの会話は未確認。
 
 ## 構成と費用
 
-「My Workspace」の`anybots-api`と`anybots-db`を使います。Singaporeリージョン、既存のDockerfile、DBは内部接続に限定します。v0.2.0から配送はAPIのプロセス内で行うため、`anybots-worker`は停止・削除します。
+「My Workspace」の`anybots-api`と`anybots-db`を使います。Singaporeリージョン、既存のDockerfile、DBは内部接続に限定します。v0.2.0から配送はAPIのプロセス内で行うため、`anybots-worker`は停止しました。
 
 既存の別サービスは読み取りだけを行います。コードの取得元は非公開リポジトリ`sota009/anybots`の`main`です。
 
@@ -63,9 +71,9 @@ APIは`node dist/main.js`で起動します。MCP、Webアプリ、通知の配�
 | `ALLOWED_HOSTS` | `anybots-api.onrender.com` |
 | `OAUTH_ISSUER` | `https://anybots-api.onrender.com` |
 | `APP_ORIGIN` | `https://anybots-api.onrender.com`（`ALLOWED_HOSTS`に含まれること） |
-| `TRUST_PROXY_HOPS` | `1`（Renderのプロキシ1段。実際の段数は未検証） |
+| `TRUST_PROXY_HOPS` | `2`（`X-Forwarded-For`の右から2番目を利用者とみなす。2026年10月4日に本番で確認） |
 | `NOTIFICATIONS_ENABLED` | `true` |
-| `NOTIFICATION_ENCRYPTION_KEY` | 32バイトの乱数の16進表記。作り直さない（Grok Webhookの復号にも使う） |
+| `NOTIFICATION_ENCRYPTION_KEY` | 32バイトの乱数の16進表記。作り直すと保存済みのGrok Webhookとdots購読の秘密を復号できなくなり、登録し直しが必要 |
 | `WEBHOOK_ALLOWED_HOSTS` | `api2.cursor.sh,connectors.api.openai.com` |
 | `GROK_EXPERIMENTAL` | `true` |
 | `NOTIFICATION_DAILY_LIMIT`／`NOTIFICATION_MONTHLY_LIMIT` | `200`／`2000` |

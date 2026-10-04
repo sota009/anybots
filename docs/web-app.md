@@ -111,7 +111,7 @@ messages（intent と approval を持つ）
   - ログイン後の書き込み：人ごとに毎分60回
   - 招待の発行：人ごとに1日20件
   - IPで拒否した要求は全体の枠を消費しない（書籍164頁のロックアウト対策）
-- 転送元IPは `X-Forwarded-For` の右から `TRUST_PROXY_HOPS` 番目（0〜3、既定0＝接続元そのもの）を使う。Renderでは1段を想定するが、実際の段数は未検証。OAuthの試行制限も同じ値を使う。
+- 転送元IPは `X-Forwarded-For` の右から `TRUST_PROXY_HOPS` 番目（0〜3、既定0＝接続元そのもの）を使う。Renderでは2（本番で確認済み。[公開構成](render-deployment.md#現在の状態)を参照）。OAuthの試行制限も同じ値を使う。
 
 ## 画面
 
