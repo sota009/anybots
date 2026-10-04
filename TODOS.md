@@ -2,7 +2,7 @@
 
 ## Owner connection directory
 
-Design is in [connection-directory.md](docs/connection-directory.md); CLI handoff is in [connection-directory-cli.md](docs/connection-directory-cli.md); Web UI is in [connection-directory-ui.md](docs/connection-directory-ui.md). Local P1–P4 slices keep the directory route and `/directory` UI default-disabled. Do not treat merges as product onboarding. Remaining acceptance: isolated-environment enablement, a real owner's first CLI or UI run, and revoke/reissue recovery.
+Design is in [connection-directory.md](docs/connection-directory.md); CLI handoff is in [connection-directory-cli.md](docs/connection-directory-cli.md); Web UI is in [connection-directory-ui.md](docs/connection-directory-ui.md). On 2026-10-04 production DB was wiped and rebuilt with the owners schema; `/directory` is enabled on `https://anybots-api.onrender.com/directory` with a newly issued directory credential. Remaining acceptance: dots/Grok re-OAuth after cutover, a real owner's first CLI run on their Mac, revoke/reissue recovery, and DB password rotation after the temporary external allowlist.
 
 ## Account-backed dots and Grok exchange
 
