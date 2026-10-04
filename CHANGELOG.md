@@ -4,6 +4,7 @@
 - Correct the Muse live-verification note: an active-session Muse↔Grok autonomous exchange is documented; auto-start and Grok-initiated new conversations remain open.
 - Replace free-form binding owner labels with `owners.id` foreign keys and align `delivery_attempts.owner_id`.
 - Add operator `create_owner` plus directory credential issue/revoke/disable with private local credential files.
+- Add default-disabled `GET /v1/me/connections` with dedicated directory auth, read-only inventory, and process-local rate limits.
 
 ## 0.1.7
 
