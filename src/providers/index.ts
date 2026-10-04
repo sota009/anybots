@@ -3,7 +3,7 @@ import { decryptSecret, webhookHeaders } from './crypto.js';
 import { validateWebhookUrl, type WebhookTransport } from './transport.js';
 
 export interface Notification {
-  id: string; bindingId: string; conversationId: string; messageId: string; provider: 'dots' | 'grok'; occurredAt: string; signal?: AbortSignal;
+  id: string; bindingId: string; conversationId: string; messageId: string; provider: 'dots' | 'grok' | 'muse'; occurredAt: string; signal?: AbortSignal;
 }
 export interface DeliveryResult {
   status: 'accepted' | 'retry' | 'failed' | 'uncertain' | 'configuration_required'; retryAfterMs?: number;
@@ -31,6 +31,8 @@ function classify(status: number, retryAfter?: string): DeliveryResult {
 export class ProviderDispatcher implements NotificationDispatcher {
   constructor(private readonly pool: Pool, private readonly options: ProviderOptions) {}
   async deliver(notification: Notification, client?: PoolClient): Promise<DeliveryResult> {
+    // Muse pulls its inbox; never treat it as an OpenAI event subscriber.
+    if (notification.provider === 'muse') return { status: 'configuration_required' };
     const database = client ?? this.pool;
     if (notification.provider === 'grok') {
       const config = this.options.groks?.[notification.bindingId];

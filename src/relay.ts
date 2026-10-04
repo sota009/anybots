@@ -5,7 +5,7 @@ import { lockRelay, withTransaction } from './db.js';
 import { RelayError } from './errors.js';
 export { RelayError } from './errors.js';
 
-export type Binding = { id: string; ownerId: string; runtimeScope: string; provider: 'dots' | 'grok'; oauthFamilyId?: string };
+export type Binding = { id: string; ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; oauthFamilyId?: string };
 type Conversation = { id: string; binding_a: string; binding_b: string; status: string; epoch: number; expires_at: Date; turn_count: number };
 export type Message = { id: string; sequence: number; text: string; expectsReply: boolean; senderBindingId: string; recipientBindingId: string; replyTo: string | null };
 const bindingColumns = 'id, owner_id AS "ownerId", runtime_scope AS "runtimeScope", provider';
@@ -79,8 +79,8 @@ export class Relay {
     return binding.oauthFamilyId ? { oauthFamilyId: binding.oauthFamilyId } : {};
   }
 
-  async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: 'dots' | 'grok'; token?: string }) {
-    const data = parse(z.object({ ownerId: z.string().min(1).max(256), runtimeScope: z.string().min(1).max(256), provider: z.enum(['dots', 'grok']), token: z.string().min(32).max(512).optional() }).strict(), input);
+  async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; token?: string }) {
+    const data = parse(z.object({ ownerId: z.string().min(1).max(256), runtimeScope: z.string().min(1).max(256), provider: z.enum(['dots', 'grok', 'muse']), token: z.string().min(32).max(512).optional() }).strict(), input);
     return this.run(async client => {
       const existing = await client.query('SELECT 1 FROM bindings WHERE runtime_scope=$1 AND active', [data.runtimeScope]);
       if (existing.rowCount) throw new RelayError('runtime_in_use');
@@ -141,7 +141,10 @@ export class Relay {
     const id = randomUUID();
     const seq = await client.query<{ sequence: number }>('UPDATE conversations SET next_sequence=next_sequence+1 WHERE id=$1 RETURNING next_sequence-1 AS sequence', [c.id]);
     await client.query('INSERT INTO messages(id,conversation_id,sequence,sender_binding_id,recipient_binding_id,text,expects_reply,reply_to) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [id, c.id, seq.rows[0]!.sequence, sender, recipient, text, expectsReply, replyTo ?? null]);
-    await client.query('INSERT INTO outbox(id,message_id,conversation_id,binding_id,epoch) VALUES($1,$2,$3,$4,$5)', [randomUUID(), id, c.id, recipient, c.epoch]);
+    // Polling clients still get an atomic delivery record, without scheduling a webhook.
+    await client.query(`INSERT INTO outbox(id,message_id,conversation_id,binding_id,epoch,status)
+      SELECT $1,$2,$3,id,$5,CASE WHEN provider='muse' THEN 'not_required' ELSE 'pending' END
+      FROM bindings WHERE id=$4`, [randomUUID(), id, c.id, recipient, c.epoch]);
     return id;
   }
 

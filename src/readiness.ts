@@ -11,10 +11,11 @@ interface ReadinessOptions {
 }
 const selection = z.strictObject({ bindingId: z.uuid(), peerBindingId: z.uuid().optional() })
   .refine(input => input.bindingId !== input.peerBindingId, 'Peer must be a different binding');
-const outboxStates = ['pending', 'accepted', 'failed', 'uncertain', 'cancelled'] as const;
+const outboxStates = ['pending', 'accepted', 'failed', 'uncertain', 'cancelled', 'not_required'] as const;
 type OutboxState = typeof outboxStates[number];
 interface NotificationStatus {
   configured: boolean;
+  mode?: 'poll';
   activeSubscriptions?: number;
   experimentalEnabled?: boolean;
   webhookConfigured?: boolean;
@@ -27,7 +28,7 @@ export async function readiness(pool: Pool, input: ReadinessInput, options: Read
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const at = (await client.query<{ at: Date }>('SELECT clock_timestamp() AS at')).rows[0]!.at;
-    const found = (await client.query<{ active: boolean; provider: 'dots' | 'grok' }>(
+    const found = (await client.query<{ active: boolean; provider: 'dots' | 'grok' | 'muse' }>(
       'SELECT active,provider FROM bindings WHERE id=$1', [bindingId])).rows[0];
     const binding = { exists: Boolean(found), active: found?.active ?? false, provider: found?.provider ?? null };
     const activeFamilies = options.oauthResource && binding.active
@@ -43,7 +44,10 @@ export async function readiness(pool: Pool, input: ReadinessInput, options: Read
         granted: binding.active && Boolean(other?.active) && Boolean(grant.rowCount) };
     }
     const notification: NotificationStatus = { configured: options.notifications !== undefined };
-    if (binding.provider === 'dots') {
+    if (binding.provider === 'muse') {
+      notification.configured = false;
+      notification.mode = 'poll';
+    } else if (binding.provider === 'dots') {
       notification.activeSubscriptions = binding.active
         ? (await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM event_subscriptions s
             WHERE s.binding_id=$1 AND s.active AND s.expires_at>$2 AND (s.oauth_family_id IS NULL OR EXISTS (

@@ -245,3 +245,7 @@ consumption, reply completion, and automatic resumption on the original AI.
 Run both directions, including a follow-up question, restart, duplicate event,
 revoked permission, and stop during pending delivery. Record separately:
 notification accepted, inbox claimed, reply committed, and remote task verified.
+
+## Meta Muse
+
+The Muse pilot uses a custom connector with a dedicated Bearer credential and authenticated inbox polling. Meta documents custom connectors and its Secure Credentials Store at https://www.meta.com/help/artificial-intelligence/1687253048996149/ and scheduled tasks at https://www.meta.com/help/artificial-intelligence/1484325780075655/ (checked October 3, 2026 via Composio/Exa). No generic incoming webhook for consumer Muse has been verified. A 401 response is not proof of a successful MCP handshake. See [the setup and evidence boundaries](muse-connection.md).

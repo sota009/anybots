@@ -65,3 +65,7 @@ dotsのMCP Eventsは公式仕様を確認済みです。GrokのWebhookは一次�
 対象dotと対象Botの両方で、通知、認証付きの本文取得、返信、元のAIの再開を試験します。公開HTTPS、各アカウントの接続設定、双方の通信許可が必要です。模擬クライアントの成功は実接続の成功に数えません。
 
 最初の依頼の後は、人間が途中で操作せずに追加の質問・回答まで往復することを完了条件とします。
+
+## Muse polling participant
+
+Muse uses its own `provider=muse` binding and Bearer credential with the existing MCP tools. Message persistence creates an outbox record atomically with status `not_required` for Muse recipients. The worker does not select these records. They prove only that webhook delivery is unnecessary; claims and finished turns establish actual consumption. Grok and dots keep their existing push transports. See [Muse setup and verification](muse-connection.md).

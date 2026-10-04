@@ -168,12 +168,19 @@ const diagnostic = {
   oauth: { configured: true, activeFamilies: 1 }, peer: null,
   notification: { configured: false, activeSubscriptions: 0 },
   messages: { sent: 0, received: 0 },
-  outbox: { pending: 0, accepted: 0, failed: 0, uncertain: 0, cancelled: 0 },
+  outbox: { pending: 0, accepted: 0, failed: 0, uncertain: 0, cancelled: 0, not_required: 0 },
   liveVerification: 'not_verified',
 };
 it('supports bounded, secret-free status diagnostics without a credential fetch', async () => {
   const mock = mockSsh([{ stdout: JSON.stringify(diagnostic) }]);
   expect(await run(mock, { action: 'status', bindingId, peerBindingId: otherId })).toEqual(diagnostic);
+  expect(mock.calls).toHaveLength(1);
+});
+it('accepts Muse polling diagnostics without mistaking skipped notifications for delivery', async () => {
+  const status = { ...diagnostic, binding: { exists: true, active: true, provider: 'muse' },
+    notification: { configured: false, mode: 'poll' }, outbox: { ...diagnostic.outbox, not_required: 2 } };
+  const mock = mockSsh([{ stdout: JSON.stringify(status) }]);
+  expect(await run(mock, { action: 'status', bindingId })).toEqual(status);
   expect(mock.calls).toHaveLength(1);
 });
 it('rejects unknown nested status fields that could contain secrets', async () => {

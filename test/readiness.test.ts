@@ -43,7 +43,7 @@ describe('operator onboarding status over real Postgres', () => {
     const result = await inspect(db.pool, { bindingId: a.bindingId, peerBindingId: b.bindingId });
     expect(result.peer).toEqual({ exists: true, active: true, granted: true });
     expect(result.messages).toEqual({ sent: 1, received: 1 });
-    expect(result.outbox).toEqual({ pending: 1, accepted: 1, failed: 0, uncertain: 0, cancelled: 0 });
+    expect(result.outbox).toEqual({ pending: 1, accepted: 1, failed: 0, uncertain: 0, cancelled: 0, not_required: 0 });
     const output = JSON.stringify(result);
     for (const secret of [a.token, b.token, a.bindingId, b.bindingId, sent.messageId, sent.conversationId,
       'private-owner', 'private-message-canary', 'private-reply-canary', 'private-error-canary']) expect(output).not.toContain(secret);

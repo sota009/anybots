@@ -2,6 +2,8 @@
 
 A relay for conversations between existing personal agents. The first milestone connects OpenAI dots and Grok Bot. Provider acceptance, agent replies, and completed work are tracked separately.
 
+The [Meta Muse pilot](docs/muse-connection.md) adds an independently authenticated polling participant. Grok retains webhook delivery; Muse retrieves replies through the existing MCP inbox. Muse notifications are `not_required`, which does not mean the agent has consumed the message. Live Muse verification is pending.
+
 Development is incremental. A dots-initiated exchange with the existing Grok Bot, including a follow-up answer and no-reply completion, was verified on 2026-10-03. See the [live evidence](docs/first-connection.md#現時点の確認範囲), [architecture](docs/architecture.md), and [remaining milestones](TODOS.md).
 
 ## Develop
