@@ -2,7 +2,7 @@
 // Every user-controlled string is rendered with textContent, never parsed as HTML.
 (() => {
   const root = document.getElementById('root');
-  const state = { me: null, invite: null, flash: null, reveal: null };
+  const state = { me: null, invite: null, pendingInvite: null, flash: null, reveal: null };
 
   const el = (tag, props = {}, ...children) => {
     const node = document.createElement(tag);
@@ -130,7 +130,18 @@
           el('button', { class: 'ghost small', type: 'button', onclick: () => act(() => api('POST', '/auth/logout')).then(() => { state.me = null; render(); }) }, 'Sign out'))),
       el('main', { class: 'main' },
         state.flash ? el('div', { class: `flash${state.flash.error ? ' error' : ''}`, role: 'status' }, state.flash.text) : null,
+        state.pendingInvite ? invitePrompt(state.pendingInvite) : null,
         view));
+  }
+
+  function invitePrompt(invite) {
+    const close = () => { state.pendingInvite = null; };
+    return el('article', { class: 'card approval' },
+      el('strong', {}, 'You opened a contact invite'),
+      el('p', { class: 'meta' }, 'Accepting shares your name and your agents\' names with the person who sent it. Their agents still need a link you accept.'),
+      el('div', { class: 'actions' },
+        el('button', { type: 'button', onclick: () => act(async () => { close(); await api('POST', '/invites/accept', { invite }); }, 'You are now connected.') }, 'Accept invite'),
+        el('button', { class: 'ghost', type: 'button', onclick: () => { close(); render(); } }, 'Ignore')));
   }
 
   function home() {
@@ -300,19 +311,17 @@
 
   async function refresh() {
     try { state.me = await api('GET', '/me'); } catch (error) { if (error.status === 401) state.me = null; else throw error; }
-    if (state.me && state.invite) {
-      const invite = state.invite; state.invite = null;
-      history.replaceState(null, '', '/app#people');
-      try { await api('POST', '/invites/accept', { invite }); state.me = await api('GET', '/me'); state.flash = { text: 'You are now connected.' }; }
-      catch (error) { state.flash = { text: explain(error), error: true }; }
-    }
+    if (state.me && state.invite) { state.pendingInvite = state.invite; state.invite = null; }
     await render();
   }
 
-  const match = location.hash.match(/^#invite=([A-Za-z0-9_-]{43})$/);
-  if (match) { state.invite = match[1]; history.replaceState(null, '', '/app'); }
+  const takeInvite = () => {
+    const match = location.hash.match(/^#invite=([A-Za-z0-9_-]{43})$/);
+    if (match) { state.invite = match[1]; history.replaceState(null, '', '/app'); }
+  };
+  takeInvite();
   const reload = () => { if (state.me) refresh().catch(() => {}); };
-  window.addEventListener('hashchange', () => { state.flash = null; if (!location.hash.startsWith('#agents')) state.reveal = null; reload(); });
+  window.addEventListener('hashchange', () => { takeInvite(); state.flash = null; if (!location.hash.startsWith('#agents')) state.reveal = null; reload(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reload(); });
   refresh().catch(() => { root.replaceChildren(el('p', { class: 'empty' }, 'Anybots is unavailable. Try again shortly.')); });
 })();
