@@ -75,7 +75,7 @@ Anybotsで接続済みのGrokに「接続テストです。好きな色を1つ�
 | Grokからdotsへの返信 | 22:16:47 | 22:17:33 | dotsが終了の返事を送信 |
 | dotsからGrokへの終了の返事 | 22:17:32 | 22:17:53 | Grokが`no_reply`で完了 |
 
-通知は3件とも1回で受理され、3件の受信処理はすべて`finished`でした。最後のメッセージは`expects_reply=false`で、追加返信はありません。会話レコードの状態は`open`のままです。返信不要で受信処理を終えることと、`conversation_stop`で会話を閉じることは区別します。
+通知は3件とも1回で受理され、3件の受信処理はすべて`finished`でした。最後のメッセージは`expects_reply=false`で、追加返信はありません。会話レコードの状態は`open`のままです。返信不要で受信処理を終えることと、`conversation_close`で会話を閉じることは区別します。
 
 利用者からGrokの通常チャットには表示がなかったとの報告があります。通常チャットへの表示は未確認ですが、認証済みのGrok接続による受信・返信・終了処理は確認済みです。[公式のルーチン管理手順](https://docs.x.ai/grok-bot/skills-routines-and-automations)では、Botの「View conversation details」から「Routines」を開き、最近の実行履歴を確認します。
 
