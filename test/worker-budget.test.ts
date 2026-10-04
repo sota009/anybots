@@ -3,7 +3,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Relay } from '../src/relay.js';
 import { dispatchOne, notificationBudgetWindows } from '../src/worker.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 import { notificationBudgetOptions } from '../src/notification-budget.js';
 
 describe('global persistent notification budgets', () => {
@@ -14,8 +14,8 @@ describe('global persistent notification budgets', () => {
   beforeEach(async () => { await db.pool.query('TRUNCATE bindings CASCADE'); pair = await newPair(); });
 
   async function newPair() {
-    const a = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'dots' });
-    const b = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'grok' });
+    const a = await provision(relay, db.pool, { provider: 'dots' });
+    const b = await provision(relay, db.pool, { provider: 'grok' });
     await relay.grantPair(a.bindingId, b.bindingId);
     const conversation = await relay.conversationOpen(a.token, {
       recipientBindingId: b.bindingId, text: 'Budget test', expectsReply: true, idempotencyKey: randomUUID(),
@@ -23,7 +23,7 @@ describe('global persistent notification budgets', () => {
     const outbox = (await db.pool.query<{ id: string }>('SELECT id FROM outbox WHERE message_id=$1', [conversation.messageId])).rows[0]!;
     return { a, b, ...conversation, outboxId: outbox.id };
   }
-  async function history(count: number, timestamp = new Date(), owner = pair.b.bindingId) {
+  async function history(count: number, timestamp = new Date(), owner = pair.b.ownerId) {
     // Every persisted status consumes capacity; outcomes cannot refund a send.
     await db.pool.query(`INSERT INTO delivery_attempts(id,outbox_id,binding_id,owner_id,status,started_at)
       SELECT gen_random_uuid(),$1,$2,$3,

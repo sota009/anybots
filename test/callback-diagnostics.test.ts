@@ -4,7 +4,7 @@ import { buildApp } from '../src/app.js';
 import { EventSubscriptions } from '../src/events.js';
 import { PublicHttpsTransport } from '../src/providers/transport.js';
 import { Relay } from '../src/relay.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
 describe('callback onboarding diagnostics', () => {
   let db: Awaited<ReturnType<typeof testDatabase>>;
@@ -13,7 +13,7 @@ describe('callback onboarding diagnostics', () => {
 
   it('returns only an unlisted hostname through authenticated MCP and stores no subscription', async () => {
     const relay = new Relay(db.pool);
-    const binding = await relay.provisionBinding({ ownerId: 'pilot', runtimeScope: 'diagnostics', provider: 'dots' });
+    const binding = await provision(relay, db.pool, { provider: 'dots', runtimeScope: 'diagnostics' });
     const events = new EventSubscriptions(db.pool, { encryptionKey: randomBytes(32), transport: new PublicHttpsTransport(['api2.cursor.sh']) });
     const diagnostics = vi.fn();
     const app = buildApp(relay, { events, onEventDiagnostic: diagnostics });
@@ -47,7 +47,7 @@ describe('callback onboarding diagnostics', () => {
 
   it('classifies unexpected failures without logging raw errors and tolerates a broken diagnostic sink', async () => {
     const relay = new Relay(db.pool);
-    const binding = await relay.provisionBinding({ ownerId: 'pilot', runtimeScope: 'diagnostic-errors', provider: 'dots' });
+    const binding = await provision(relay, db.pool, { provider: 'dots', runtimeScope: 'diagnostic-errors' });
     const diagnostics = vi.fn(() => { throw new Error('sink failed'); });
     const events = { catalog: () => ({}), subscribe: async () => { throw new Error('private-database-url'); },
       unsubscribe: async () => ({}) };

@@ -4,7 +4,7 @@ import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from 'vites
 import { EventSubscriptions, INBOX_EVENT, subscriptionId } from '../src/events.js';
 import { decryptSecret } from '../src/providers/crypto.js';
 import { ProviderDispatcher } from '../src/providers/index.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, testDatabase } from './helpers.js';
 import { buildApp } from '../src/app.js';
 import { Relay } from '../src/relay.js';
 
@@ -19,7 +19,8 @@ describe('persistent event subscriptions', () => {
   afterAll(async () => { await db?.close(); });
   beforeEach(async () => {
     await pool.query('TRUNCATE bindings CASCADE'); binding = randomUUID();
-    await pool.query('INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash) VALUES($1,$2,$3,$4,$5)', [binding, 'alice', 'alice-dots', 'dots', 'hash']);
+    const ownerId = await createOwner(pool);
+    await pool.query('INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash) VALUES($1,$2,$3,$4,$5)', [binding, ownerId, 'alice-dots', 'dots', 'hash']);
     post.mockClear(); post.mockImplementation(async (_url, body) => ({ status: 200, body: JSON.stringify({ challenge: JSON.parse(body).challenge }) }));
     events = new EventSubscriptions(pool, { encryptionKey: key, transport: { post } });
   });

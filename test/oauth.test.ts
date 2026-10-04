@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OAuthPilot } from '../src/oauth.js';
 import { Relay } from '../src/relay.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
 const issuer = 'https://relay.example.test';
 const redirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
@@ -32,7 +32,7 @@ describe('pilot OAuth authorization code + PKCE over real Postgres', () => {
     // Keep the registration minute bucket stable; database clocks and timers
     // stay real so expiration and advisory-lock wait tests retain their coverage.
     vi.spyOn(Date, 'now').mockReturnValue(Date.now());
-    binding = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'dots' });
+    binding = await provision(relay, db.pool, { provider: 'dots' });
     const registration = await app.inject({ method: 'POST', url: '/oauth/register', payload: { redirect_uris: [redirect], client_name: '<script>malicious()</script>', token_endpoint_auth_method: 'none' } });
     expect(registration.statusCode).toBe(201); clientId = registration.json().client_id;
   });

@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OAuthPilot } from '../src/oauth.js';
 import { Relay } from '../src/relay.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
 const issuer = 'https://relay.example.test';
 const redirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
@@ -32,7 +32,7 @@ describe('OAuth rate-limit isolation', () => {
   it('does not let already-rejected source requests exhaust another clients token allowance', async () => {
     const remoteAddress = '198.51.100.2';
     const relay = new Relay(db.pool);
-    const binding = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'dots' });
+    const binding = await provision(relay, db.pool, { provider: 'dots' });
     const registration = await app.inject({ method: 'POST', url: '/oauth/register', remoteAddress,
       payload: { redirect_uris: [redirect] } });
     expect(registration.statusCode).toBe(201);

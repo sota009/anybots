@@ -7,7 +7,7 @@ import { OAuthPilot } from '../src/oauth.js';
 import { Relay } from '../src/relay.js';
 import { buildApp } from '../src/app.js';
 import { admin } from '../src/admin.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
 const issuer = 'https://relay.example.test';
 const redirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
@@ -19,7 +19,7 @@ afterAll(async () => { await db?.close(); if (directory) await rm(directory, { r
 it('connects operator pairing, browser consent, OAuth tokens and the real MCP authorization boundary', async () => {
   const oauth = new OAuthPilot(db.pool, { issuer, redirectUris: [redirect] });
   const relay = new Relay(db.pool, { oauthResource: oauth.resource });
-  const binding = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'dots' });
+  const binding = await provision(relay, db.pool, { provider: 'dots' });
   const app = buildApp(relay, { allowedHosts: ['relay.example.test'], oauth });
   const headers = { host: 'relay.example.test' };
   const verifier = randomBytes(32).toString('base64url');

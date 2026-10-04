@@ -10,7 +10,8 @@ const { runRemoteAdmin, remoteAdminCli } = await import(moduleUrl);
 const host = 'srv-db0lku9srm7s7384ral0@ssh.singapore.render.com';
 const bindingId = 'a2222222-2222-4222-8222-222222222222';
 const otherId = 'b2222222-2222-4222-8222-222222222222';
-const provision = { action: 'provision', ownerId: 'operator', runtimeScope: 'pilot', provider: 'dots' };
+const ownerId = 'a1111111-1111-4111-8111-111111111111';
+const provision = { action: 'provision', ownerId, runtimeScope: 'pilot', provider: 'dots' };
 const secret = 'test-secret-must-not-be-printed';
 let directory: string;
 let configFile: string;
@@ -48,7 +49,7 @@ function mockSsh(replies: Reply[]) {
 function run(mock: ReturnType<typeof mockSsh>, command: unknown = provision, extra = {}) {
   return runRemoteAdmin({ configFile, credentialsDirectory: output, input: Readable.from([JSON.stringify(command)]), spawnImpl: mock.spawnImpl, ...extra });
 }
-const provisionMetadata = (file = `/app/.local/${bindingId}.json`) => JSON.stringify({ bindingId, credentialsFile: file });
+const provisionMetadata = (file = `/app/.local/${bindingId}.json`) => JSON.stringify({ bindingId, ownerId, credentialsFile: file });
 
 it('uses fixed SSH options and stdin and saves credentials exclusively with mode 0600', async () => {
   const mock = mockSsh([{ stdout: provisionMetadata() }, { stdout: JSON.stringify({ token: secret, bindingId }) }]);
@@ -231,7 +232,7 @@ it('prints only metadata on CLI success, discarding even successful SSH stderr',
   let stdout = ''; let stderr = '';
   const code = await remoteAdminCli({ argv: ['--config', configFile, '--credentials-dir', output], input: Readable.from([JSON.stringify(provision)]), stdout: { write: (s: string) => { stdout += s; } }, stderr: { write: (s: string) => { stderr += s; } }, spawnImpl: mock.spawnImpl });
   expect(code).toBe(0);
-  expect(JSON.parse(stdout)).toEqual({ bindingId, credentialsFile: join(output, `${bindingId}.json`) });
+  expect(JSON.parse(stdout)).toEqual({ bindingId, ownerId, credentialsFile: join(output, `${bindingId}.json`) });
   expect(stdout).not.toContain(secret);
   expect(stderr).toBe('');
 });

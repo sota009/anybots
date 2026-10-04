@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { admin } from '../src/admin.js';
 import { Relay } from '../src/relay.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
 const resource = 'https://relay.example.test/mcp';
 const inspect = async (...args: Parameters<typeof import('../src/readiness.js').readiness>) =>
@@ -10,13 +10,13 @@ const inspect = async (...args: Parameters<typeof import('../src/readiness.js').
 
 describe('operator onboarding status over real Postgres', () => {
   let db: Awaited<ReturnType<typeof testDatabase>>; let relay: Relay;
-  let a: { bindingId: string; token: string }; let b: typeof a;
+  let a: { bindingId: string; token: string; ownerId: string }; let b: typeof a;
   beforeAll(async () => { db = await testDatabase(); relay = new Relay(db.pool); });
   afterAll(async () => { await db?.close(); });
   beforeEach(async () => {
     await db.pool.query('TRUNCATE bindings CASCADE');
-    a = await relay.provisionBinding({ ownerId: 'private-owner', runtimeScope: randomUUID(), provider: 'dots' });
-    b = await relay.provisionBinding({ ownerId: 'other-private-owner', runtimeScope: randomUUID(), provider: 'grok' });
+    a = await provision(relay, db.pool, { provider: 'dots' });
+    b = await provision(relay, db.pool, { provider: 'grok' });
   });
 
   it('delegates status to the operator reader without changing or completing a connection', async () => {
@@ -36,7 +36,7 @@ describe('operator onboarding status over real Postgres', () => {
     await db.pool.query("UPDATE outbox SET status='accepted',last_error='private-error-canary' WHERE message_id=$1", [sent.messageId]);
     await relay.conversationOpen(b.token, { recipientBindingId: a.bindingId,
       text: 'private-reply-canary', expectsReply: false, idempotencyKey: randomUUID() });
-    const unrelated = await relay.provisionBinding({ ownerId: 'unrelated', runtimeScope: randomUUID(), provider: 'grok' });
+    const unrelated = await provision(relay, db.pool, { provider: 'grok' });
     await relay.grantPair(a.bindingId, unrelated.bindingId);
     await relay.conversationOpen(a.token, { recipientBindingId: unrelated.bindingId,
       text: 'unrelated-message', expectsReply: false, idempotencyKey: randomUUID() });
@@ -46,7 +46,7 @@ describe('operator onboarding status over real Postgres', () => {
     expect(result.outbox).toEqual({ pending: 1, accepted: 1, failed: 0, uncertain: 0, cancelled: 0, not_required: 0 });
     const output = JSON.stringify(result);
     for (const secret of [a.token, b.token, a.bindingId, b.bindingId, sent.messageId, sent.conversationId,
-      'private-owner', 'private-message-canary', 'private-reply-canary', 'private-error-canary']) expect(output).not.toContain(secret);
+      a.ownerId, 'private-message-canary', 'private-reply-canary', 'private-error-canary']) expect(output).not.toContain(secret);
     expect((await inspect(db.pool, { bindingId: a.bindingId })).messages.sent).toBe(2);
     await relay.revokePair(a.bindingId, b.bindingId);
     expect((await inspect(db.pool, { bindingId: a.bindingId, peerBindingId: b.bindingId })).peer?.granted).toBe(false);

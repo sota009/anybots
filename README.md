@@ -27,11 +27,13 @@ Tests create isolated schemas and remove only their own schemas. Set `TEST_DATAB
 The initial relay uses operator-provisioned, consented connections. This is a development path, not completed product onboarding. The [OAuth pilot](docs/oauth.md) provides a one-time browser pairing flow; the owner's real personal Grok and dots connections and automatic exchange have been [verified](docs/first-connection.md#現時点の確認範囲). A separate [Meta Muse connector](docs/muse-connection.md) has also completed an automatic exchange with Grok during an active Muse execution.
 
 ```sh
-echo '{"action":"provision","ownerId":"owner-a","runtimeScope":"dots-owner-a","provider":"dots"}' | npm run admin
-echo '{"action":"provision","ownerId":"owner-b","runtimeScope":"grok-owner-b","provider":"grok"}' | npm run admin
+echo '{"action":"create_owner"}' | npm run admin
+# reuse each returned owner UUID:
+echo '{"action":"provision","ownerId":"<owner-a-uuid>","runtimeScope":"dots-owner-a","provider":"dots"}' | npm run admin
+echo '{"action":"provision","ownerId":"<owner-b-uuid>","runtimeScope":"grok-owner-b","provider":"grok"}' | npm run admin
 ```
 
-Each operation writes a new credential file under `.local/` with mode `0600` and prints only its path and binding ID. Keep that file private. Never paste credentials into AI conversations, logs, issues, or Git. Choose `runtimeScope` to reflect shared authentication/runtime boundaries; it is not a persona name.
+`ownerId` is a UUID from `create_owner`, not a free-form label. Each provision writes a new credential file under `.local/` with mode `0600` and prints only its path, binding ID, and owner ID. Keep that file private. Never paste credentials into AI conversations, logs, issues, or Git. Choose `runtimeScope` to reflect shared authentication/runtime boundaries; it is not a persona name. See [connection directory](docs/connection-directory.md) for owner inventory credentials.
 
 After both owners consent, pass their returned binding UUIDs via stdin:
 

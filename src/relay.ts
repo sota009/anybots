@@ -80,14 +80,21 @@ export class Relay {
   }
 
   async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; token?: string }) {
-    const data = parse(z.object({ ownerId: z.string().min(1).max(256), runtimeScope: z.string().min(1).max(256), provider: z.enum(['dots', 'grok', 'muse']), token: z.string().min(32).max(512).optional() }).strict(), input);
+    const data = parse(z.object({
+      ownerId: z.uuid(),
+      runtimeScope: z.string().min(1).max(256),
+      provider: z.enum(['dots', 'grok', 'muse']),
+      token: z.string().min(32).max(512).optional(),
+    }).strict(), input);
     return this.run(async client => {
+      const owner = await client.query('SELECT 1 FROM owners WHERE id=$1', [data.ownerId]);
+      if (!owner.rowCount) throw new RelayError('invalid_input', 'Unknown owner', 400);
       const existing = await client.query('SELECT 1 FROM bindings WHERE runtime_scope=$1 AND active', [data.runtimeScope]);
       if (existing.rowCount) throw new RelayError('runtime_in_use');
       const token = data.token ?? randomBytes(32).toString('base64url');
       const bindingId = randomUUID();
       await client.query('INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash) VALUES($1,$2,$3,$4,$5)', [bindingId, data.ownerId, data.runtimeScope, data.provider, hash(token)]);
-      return { bindingId, token };
+      return { bindingId, token, ownerId: data.ownerId };
     });
   }
 

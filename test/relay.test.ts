@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { Relay } from '../src/relay.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
 describe('Postgres relay invariants', () => {
   let db: Awaited<ReturnType<typeof testDatabase>>;
@@ -9,8 +9,8 @@ describe('Postgres relay invariants', () => {
   beforeAll(async () => { db = await testDatabase(); relay = new Relay(db.pool); });
   afterAll(async () => { await db?.close(); });
   beforeEach(async () => {
-    a = await relay.provisionBinding({ ownerId: crypto.randomUUID(), runtimeScope: crypto.randomUUID(), provider: 'dots' });
-    b = await relay.provisionBinding({ ownerId: crypto.randomUUID(), runtimeScope: crypto.randomUUID(), provider: 'grok' });
+    a = await provision(relay, db.pool, { provider: 'dots' });
+    b = await provision(relay, db.pool, { provider: 'grok' });
     await relay.grantPair(a.bindingId, b.bindingId);
   });
   const open = (key: string = crypto.randomUUID(), expectsReply = true) => relay.conversationOpen(a.token, { recipientBindingId: b.bindingId, text: 'Question', expectsReply, idempotencyKey: key });
@@ -68,7 +68,7 @@ describe('Postgres relay invariants', () => {
 
   it('requires active scoped credentials, membership and current bilateral consent', async () => {
     const c = await open();
-    const outsider = await relay.provisionBinding({ ownerId: 'outsider', runtimeScope: 'outsider', provider: 'dots' });
+    const outsider = await provision(relay, db.pool, { provider: 'dots', runtimeScope: 'outsider' });
     await expect(relay.conversationRead(outsider.token, { conversationId: c.conversationId })).rejects.toMatchObject({ code: 'forbidden' });
     await expect(relay.conversationRead('wrong', { conversationId: c.conversationId })).rejects.toMatchObject({ code: 'unauthorized' });
     await relay.revokePair(a.bindingId, b.bindingId);
@@ -81,7 +81,7 @@ describe('Postgres relay invariants', () => {
   it('rejects oversized input and enforces one active binding per shared runtime', async () => {
     await expect(relay.conversationOpen(a.token, { recipientBindingId: b.bindingId, text: '界'.repeat(6000), expectsReply: true, idempotencyKey: 'large' })).rejects.toMatchObject({ code: 'invalid_input' });
     const binding = await relay.authenticate(a.token);
-    await expect(relay.provisionBinding({ ownerId: 'other', runtimeScope: binding.runtimeScope, provider: 'grok' })).rejects.toMatchObject({ code: 'runtime_in_use' });
+    await expect(provision(relay, db.pool, { provider: 'grok', runtimeScope: binding.runtimeScope })).rejects.toMatchObject({ code: 'runtime_in_use' });
   });
   it('rolls back the message and conversation when outbox insertion fails', async () => {
     await db.pool.query("CREATE FUNCTION fail_outbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected persistence failure'; END; $$");
@@ -129,7 +129,7 @@ describe('Postgres relay invariants', () => {
 
   it('limits new conversations across bindings owned by the same owner', async () => {
     const binding = await relay.authenticate(a.token);
-    const sibling = await relay.provisionBinding({ ownerId: binding.ownerId, runtimeScope: crypto.randomUUID(), provider: 'dots' });
+    const sibling = await provision(relay, db.pool, { provider: 'dots', ownerId: binding.ownerId });
     await relay.grantPair(sibling.bindingId, b.bindingId);
     // Seed the already committed hourly history; test the boundary itself.
     for (let index = 0; index < 60; index++) {
@@ -186,7 +186,7 @@ describe('Postgres relay invariants', () => {
     await expect(relay.conversationOpen(b.token, { recipientBindingId: a.bindingId, text: 'bypass', expectsReply: true, idempotencyKey: 'stopped-bypass' })).rejects.toMatchObject({ code: 'runtime_busy' });
     const original = await relay.authenticate(b.token);
     await relay.disableBinding(b.bindingId);
-    const replacement = await relay.provisionBinding({ ownerId: original.ownerId, runtimeScope: original.runtimeScope, provider: 'grok' });
+    const replacement = await provision(relay, db.pool, { provider: 'grok', ownerId: original.ownerId, runtimeScope: original.runtimeScope });
     await relay.grantPair(a.bindingId, replacement.bindingId);
     const newer = await relay.conversationOpen(a.token, { recipientBindingId: replacement.bindingId, text: 'new binding', expectsReply: true, idempotencyKey: 'replacement' });
     expect(await relay.inboxClaim(replacement.token, { conversationId: newer.conversationId })).toBeNull();

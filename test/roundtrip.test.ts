@@ -8,7 +8,7 @@ import { ProviderDispatcher } from '../src/providers/index.js';
 import type { WebhookTransport } from '../src/providers/transport.js';
 import { Relay } from '../src/relay.js';
 import { dispatchOne } from '../src/worker.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
 // This is a local contract simulation. It does not contact OpenAI, xAI, or a real owner's agent.
 describe('local simulated dots/Grok multi-turn relay (not live-provider verification)', () => {
@@ -19,8 +19,8 @@ describe('local simulated dots/Grok multi-turn relay (not live-provider verifica
   for (const initiatingProvider of ['dots', 'grok'] as const) {
     it(`${initiatingProvider} initiates; notification, authenticated claim, clarification, and terminal reply stay distinct`, async () => {
       const relay = new Relay(db.pool);
-      const dots = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'dots' });
-      const grok = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'grok' });
+      const dots = await provision(relay, db.pool, { provider: 'dots' });
+      const grok = await provision(relay, db.pool, { provider: 'grok' });
       await relay.grantPair(dots.bindingId, grok.bindingId);
       const encryptionKey = randomBytes(32);
       const signingKey = randomBytes(32);
