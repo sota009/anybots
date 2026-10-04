@@ -4,7 +4,7 @@ import { buildApp } from '../src/app.js';
 import { EventSubscriptions } from '../src/events.js';
 import { PublicHttpsTransport } from '../src/providers/transport.js';
 import { Relay } from '../src/relay.js';
-import { createOwner, provision, testDatabase } from './helpers.js';
+import { provision, testDatabase } from './helpers.js';
 
 describe('callback onboarding diagnostics', () => {
   let db: Awaited<ReturnType<typeof testDatabase>>;

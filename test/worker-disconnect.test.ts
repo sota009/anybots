@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 import pg from 'pg';
 import { Relay } from '../src/relay.js';
 import { dispatchOne } from '../src/worker.js';
-import { createOwner, provision, testDatabase } from './helpers.js';
+import { provision, testDatabase } from './helpers.js';
 
 let db: Awaited<ReturnType<typeof testDatabase>>;
 beforeAll(async () => { db = await testDatabase(); });
