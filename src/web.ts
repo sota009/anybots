@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { isIP } from 'node:net';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { Accounts } from './accounts.js';
@@ -6,7 +7,7 @@ import { RelayError } from './errors.js';
 import type { Network } from './network.js';
 
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
-const AUTH_LIMITS = { perSource: 20, global: 200 };
+const AUTH_LIMITS = { perSource: 20, global: 1000 };
 const WRITE_LIMITS = { perSource: 60, global: 3000 };
 const SESSION_MAX_AGE_S = 14 * 24 * 3600;
 
@@ -22,16 +23,28 @@ export function appOrigin(env: NodeJS.ProcessEnv = process.env): string | undefi
   return url.origin;
 }
 
+/** IPv6 hosts commonly hold a whole /64, so throttling keys on that prefix. */
+function sourceKey(address: string): string {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
+  if (mapped) return mapped[1]!;
+  if (isIP(address) !== 6) return address;
+  const [head = '', tail = ''] = address.toLowerCase().split('::');
+  const left = head ? head.split(':') : [];
+  const right = address.includes('::') ? (tail ? tail.split(':') : []) : [];
+  const groups = [...left, ...Array(8 - left.length - right.length).fill('0'), ...right];
+  return `${groups.slice(0, 4).map(group => group.replace(/^0+(?=.)/, '')).join(':')}::/64`;
+}
+
 /**
  * The right-most `hops` forwarded entries were appended by trusted proxies;
- * anything further left is client-controlled and ignored.
+ * anything further left is client-controlled and ignored. Returns a throttling key.
  */
 export function clientAddress(request: FastifyRequest, hops: number): string {
   const socket = request.socket.remoteAddress ?? 'unknown';
-  if (hops <= 0) return socket;
+  if (hops <= 0) return sourceKey(socket);
   const header = request.headers['x-forwarded-for'];
   const chain = (Array.isArray(header) ? header.join(',') : header ?? '').split(',').map(value => value.trim()).filter(Boolean);
-  return chain.length >= hops ? chain[chain.length - hops]! : socket;
+  return sourceKey(chain.length >= hops ? chain[chain.length - hops]! : socket);
 }
 
 function cookie(request: FastifyRequest, name: string): string | undefined {

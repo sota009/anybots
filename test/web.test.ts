@@ -3,7 +3,7 @@ import { Accounts } from '../src/accounts.js';
 import { buildApp } from '../src/app.js';
 import { Network } from '../src/network.js';
 import { Relay } from '../src/relay.js';
-import { appOrigin } from '../src/web.js';
+import { appOrigin, clientAddress } from '../src/web.js';
 import { FakePasskey } from './webauthn-fake.js';
 import { testDatabase } from './helpers.js';
 
@@ -120,4 +120,13 @@ it('accepts only exact HTTPS app origins outside loopback', () => {
   for (const value of ['http://anybots.example', 'https://anybots.example/app', 'https://u:p@anybots.example', 'https://anybots.example/?x=1']) {
     expect(() => appOrigin({ APP_ORIGIN: value })).toThrow();
   }
+});
+
+it('groups IPv6 clients by /64 so one host cannot rotate addresses past the per-source limit', () => {
+  const at = (forwarded: string) => clientAddress({ socket: { remoteAddress: '10.0.0.1' }, headers: { 'x-forwarded-for': forwarded } } as never, 1);
+  expect(at('2001:db8:1:2::1')).toBe(at('2001:db8:1:2:ffff:ffff:ffff:ffff'));
+  expect(at('2001:db8:1:2::1')).not.toBe(at('2001:db8:1:3::1'));
+  expect(at('203.0.113.5')).toBe('203.0.113.5');
+  expect(at('::ffff:203.0.113.5')).toBe('203.0.113.5');
+  expect(clientAddress({ socket: { remoteAddress: '2001:db8::9' }, headers: {} } as never, 0)).toBe(at('2001:db8:0:0:1::'));
 });
