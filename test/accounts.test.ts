@@ -53,7 +53,14 @@ it('rejects a passkey response for another origin or without user verification',
   const { challengeId, options } = await accounts.registerOptions({ invite: token, displayName: 'Ada' });
   await expect(accounts.registerVerify({ challengeId, response: new FakePasskey(origin).register(options, 'https://evil.example.test') }))
     .rejects.toMatchObject({ code: 'authentication_failed' });
+  await expect(accounts.registerVerify({ challengeId, response: new FakePasskey(origin).register(options) }))
+    .rejects.toMatchObject({ code: 'authentication_failed' });
   const { passkey } = await signup();
+  const attempt = await accounts.loginOptions();
+  await expect(accounts.loginVerify({ challengeId: attempt.challengeId, response: passkey.login(attempt.options, { origin: 'https://evil.example.test' }) }))
+    .rejects.toMatchObject({ code: 'authentication_failed' });
+  await expect(accounts.loginVerify({ challengeId: attempt.challengeId, response: passkey.login(attempt.options) }))
+    .rejects.toMatchObject({ code: 'authentication_failed' });
   await expect(login(passkey, { flags: 0x01 })).rejects.toMatchObject({ code: 'authentication_failed' });
   await expect(login(passkey, { origin: 'https://evil.example.test' })).rejects.toMatchObject({ code: 'authentication_failed' });
 });

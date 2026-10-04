@@ -92,8 +92,8 @@ export class Accounts {
 
   async registerVerify(input: { challengeId: string; response: unknown }) {
     const data = parse(z.strictObject({ challengeId: z.uuid(), response: z.record(z.string(), z.unknown()) }), input);
+    const challenge = await this.takeChallenge(data.challengeId, 'register');
     return withTransaction(this.pool, async client => {
-      const challenge = await this.takeChallenge(client, data.challengeId, 'register');
       let info;
       try {
         const verified = await verifyRegistrationResponse({
@@ -136,8 +136,8 @@ export class Accounts {
   async loginVerify(input: { challengeId: string; response: unknown }) {
     const data = parse(z.strictObject({ challengeId: z.uuid(), response: z.record(z.string(), z.unknown()) }), input);
     const credentialId = parse(z.string().min(16).max(1400), (data.response as { id?: unknown }).id);
+    const challenge = await this.takeChallenge(data.challengeId, 'login');
     return withTransaction(this.pool, async client => {
-      const challenge = await this.takeChallenge(client, data.challengeId, 'login');
       const found = await client.query<{ owner_id: string; public_key: Buffer; counter: string; transports: string[] }>(
         'SELECT owner_id,public_key,counter,transports FROM passkeys WHERE id=$1 FOR UPDATE', [credentialId]);
       const passkey = found.rows[0];
@@ -157,8 +157,9 @@ export class Accounts {
     });
   }
 
-  private async takeChallenge(client: PoolClient, id: string, purpose: 'register' | 'login') {
-    const taken = await client.query<{ challenge: string; owner_id: string | null; invite_id: string | null; display_name: string | null }>(
+  /** Committed on its own so that a failed verification still burns the challenge. */
+  private async takeChallenge(id: string, purpose: 'register' | 'login') {
+    const taken = await this.pool.query<{ challenge: string; owner_id: string | null; invite_id: string | null; display_name: string | null }>(
       'DELETE FROM webauthn_challenges WHERE id=$1 AND purpose=$2 AND expires_at>clock_timestamp() RETURNING challenge,owner_id,invite_id,display_name', [id, purpose]);
     if (!taken.rows[0]) throw failed();
     return taken.rows[0];
