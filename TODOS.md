@@ -1,5 +1,9 @@
 # Next milestones
 
+## Owner connection directory
+
+Design is recorded in [connection-directory.md](docs/connection-directory.md). Implement as three slices while keeping the directory route default-disabled: (P1) normalized owners and directory credentials with operator issue/revoke, (P2) `GET /v1/me/connections` read-only inventory, (P3) macOS CLI and first-run operator handoff. Do not treat partial merges as product onboarding. Live owner first-run confirmation remains a separate acceptance step after local and isolated-environment tests.
+
 ## Account-backed dots and Grok exchange
 
 On 2026-10-03, a dots-initiated exchange passed with the existing agents: three notifications accepted on their first attempts, three inbox turns finished, and the final input consumed as `no_reply`. The user reported completion without intervening during the exchange; production DB records independently confirm the processing. See [timestamps and evidence boundaries](docs/first-connection.md#現時点の確認範囲). Still verify a Grok-initiated new conversation and live restart, duplicate-event, revocation, and stop scenarios. Local tests do not close those remaining items.
