@@ -2,10 +2,11 @@ import { createMcpFastifyApp } from '@modelcontextprotocol/fastify';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpHandler, McpServer, ProtocolError, type CallToolResult, type ToolCallback } from '@modelcontextprotocol/server';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { Relay, RelayError } from './relay.js';
 import { EventError } from './events.js';
+import { registerDirectoryRoutes } from './directory-routes.js';
 
 const MAX_HTTP_BODY_BYTES = 128 * 1024;
 const id = z.uuid();
@@ -25,6 +26,7 @@ export interface AppOptions {
   events?: EventHooks;
   onEventDiagnostic?: (diagnostic: EventDiagnostic) => void;
   oauth?: { resourceMetadataUrl: string; register(app: FastifyInstance): void };
+  directory?: { pool: Pool; audience: string };
 }
 
 interface EventDiagnostic {
@@ -99,6 +101,7 @@ export function buildApp(relay: Relay, options: AppOptions = {}) {
     },
   });
   options.oauth?.register(app);
+  if (options.directory) registerDirectoryRoutes(app, options.directory);
   return app;
 }
 

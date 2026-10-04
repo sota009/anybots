@@ -15,13 +15,37 @@ if (host !== '127.0.0.1' && host !== '::1' && !allowedHosts?.length) {
 const pool = new pg.Pool({ connectionString: databaseUrl });
 const notifications = process.env.NOTIFICATIONS_ENABLED === 'true' ? await notificationOptions() : undefined;
 const oauth = oauthFromEnvironment(pool);
+const directoryEnabled = process.env.DIRECTORY_ENABLED === 'true';
+let directory: { pool: pg.Pool; audience: string } | undefined;
+if (directoryEnabled) {
+  const audience = process.env.DIRECTORY_AUDIENCE;
+  if (!audience) throw new Error('DIRECTORY_AUDIENCE is required when DIRECTORY_ENABLED=true');
+  const parsed = new URL(audience);
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash
+    || (parsed.pathname !== '/' && parsed.pathname !== '')) {
+    throw new Error('DIRECTORY_AUDIENCE must be an https origin');
+  }
+  directory = {
+    audience: parsed.origin,
+    pool: new pg.Pool({
+      connectionString: databaseUrl,
+      max: 2,
+      connectionTimeoutMillis: 500,
+      allowExitOnIdle: true,
+    }),
+  };
+}
 const app = buildApp(new Relay(pool, oauth ? { oauthResource: oauth.resource } : {}), {
   onEventDiagnostic: diagnostic => console.log(JSON.stringify(diagnostic)),
   ...(allowedHosts ? { allowedHosts } : {}),
   ...(notifications ? { events: new EventSubscriptions(pool, notifications) } : {}),
   ...(oauth ? { oauth } : {}),
+  ...(directory ? { directory } : {}),
 });
-app.addHook('onClose', () => pool.end());
+app.addHook('onClose', async () => {
+  await pool.end();
+  if (directory) await directory.pool.end();
+});
 const shutdown = () => { void app.close().catch(() => { process.exitCode = 1; }); };
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
