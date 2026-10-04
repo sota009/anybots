@@ -5,6 +5,7 @@
 - Replace free-form binding owner labels with `owners.id` foreign keys and align `delivery_attempts.owner_id`.
 - Add operator `create_owner` plus directory credential issue/revoke/disable with private local credential files.
 - Add default-disabled `GET /v1/me/connections` with dedicated directory auth, read-only inventory, and process-local rate limits.
+- Add the `anybots connections` CLI for one-shot HTTPS inventory reads with fixed exit codes and no automatic retries.
 
 ## 0.1.7
 

@@ -2,7 +2,7 @@
 
 ## Owner connection directory
 
-Design is recorded in [connection-directory.md](docs/connection-directory.md). Implement as three slices while keeping the directory route default-disabled: (P1) normalized owners and directory credentials with operator issue/revoke, (P2) `GET /v1/me/connections` read-only inventory, (P3) macOS CLI and first-run operator handoff. Do not treat partial merges as product onboarding. Live owner first-run confirmation remains a separate acceptance step after local and isolated-environment tests.
+Design is in [connection-directory.md](docs/connection-directory.md); CLI handoff is in [connection-directory-cli.md](docs/connection-directory-cli.md). Local P1–P3 implementation is in progress/merged as stacked slices with the directory route default-disabled. Do not treat merges as product onboarding. Remaining acceptance: isolated-environment enablement and a real owner's first `anybots connections` run, plus revoke/reissue recovery.
 
 ## Account-backed dots and Grok exchange
 

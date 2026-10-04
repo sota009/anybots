@@ -6,6 +6,9 @@
   "engines": {
     "node": ">=24.20.0 <25"
   },
+  "bin": {
+    "anybots": "./dist/cli.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -17,7 +20,8 @@
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "worker": "node dist/worker-main.js",
-    "admin:remote": "node scripts/remote-admin.mjs"
+    "admin:remote": "node scripts/remote-admin.mjs",
+    "cli": "tsx src/cli.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/fastify": "2.0.1",
