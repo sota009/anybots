@@ -89,17 +89,22 @@ export class Relay {
     return binding.oauthFamilyId ? { oauthFamilyId: binding.oauthFamilyId } : {};
   }
 
-  async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; displayName?: string; token?: string }) {
+  async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; displayName?: string; token?: string; maxActive?: number }) {
     const data = parse(z.object({
       ownerId: z.uuid(),
       runtimeScope: z.string().min(1).max(256),
       provider: z.enum(['dots', 'grok', 'muse']),
       displayName: z.string().trim().min(1).max(64).optional(),
       token: z.string().min(32).max(512).optional(),
+      maxActive: z.number().int().positive().optional(),
     }).strict(), input);
     return this.run(async client => {
       const owner = await client.query('SELECT 1 FROM owners WHERE id=$1', [data.ownerId]);
       if (!owner.rowCount) throw new RelayError('invalid_input', 'Unknown owner', 400);
+      if (data.maxActive !== undefined) {
+        const active = await client.query<{ n: number }>('SELECT count(*)::int AS n FROM bindings WHERE owner_id=$1 AND active', [data.ownerId]);
+        if (active.rows[0]!.n >= data.maxActive) throw new RelayError('limit_reached', 'Agent limit reached', 409);
+      }
       const existing = await client.query('SELECT 1 FROM bindings WHERE runtime_scope=$1 AND active', [data.runtimeScope]);
       if (existing.rowCount) throw new RelayError('runtime_in_use');
       const token = data.token ?? randomBytes(32).toString('base64url');
@@ -315,6 +320,8 @@ export class Relay {
       const completed = await client.query("UPDATE turns SET status='finished',result=$2,finished_at=clock_timestamp() WHERE id=$1 AND lease_expires_at>clock_timestamp()", [turn.id, data.result]);
       if (!completed.rowCount) throw new RelayError('lease_expired');
       if (c.turn_count >= 12) await this.stop(client, c.id, 'limited');
+      // Claims in this runtime were held back while the turn was busy.
+      await client.query(`SELECT pg_notify('${INBOX_CHANNEL}', id::text) FROM bindings WHERE runtime_scope=$1 AND active`, [me.runtimeScope]);
       await this.remember(client, me.id, 'finish', data.idempotencyKey, data, result);
       return result;
     });

@@ -159,6 +159,12 @@ it('stops every link when a contact is removed or an agent is disconnected', asy
   expect((await network.overview(ada)).agents).toEqual([]);
 });
 
+it('caps active agents per owner even under concurrent requests', async () => {
+  const results = await Promise.allSettled(Array.from({ length: 25 }, () => network.createAgent(ada, { provider: 'muse', displayName: 'many' })));
+  expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(20);
+  expect(results.filter(r => r.status === 'rejected').every(r => (r as PromiseRejectedResult).reason.code === 'limit_reached')).toBe(true);
+});
+
 it('cannot accept a pending link after the contact is removed or the agent is disabled', async () => {
   const mine = await agent(ada); const theirs = await agent(bob); const other = await agent(bob);
   const first = await network.proposeLink(ada, { agentId: mine.id, peerAgentId: theirs.id });

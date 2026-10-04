@@ -105,9 +105,7 @@ export class Network {
 
   async createAgent(ownerId: string, input: unknown) {
     const data = parse(z.strictObject({ provider: z.enum(['dots', 'grok', 'muse']), displayName: name }), input);
-    const count = await this.pool.query<{ n: number }>('SELECT count(*)::int AS n FROM bindings WHERE owner_id=$1 AND active', [ownerId]);
-    if (count.rows[0]!.n >= MAX_AGENTS) throw new RelayError('limit_reached', 'Agent limit reached', 409);
-    const created = await this.relay.provisionBinding({ ownerId, runtimeScope: randomUUID(), provider: data.provider, displayName: data.displayName });
+    const created = await this.relay.provisionBinding({ ownerId, runtimeScope: randomUUID(), provider: data.provider, displayName: data.displayName, maxActive: MAX_AGENTS });
     const connect = data.provider === 'muse'
       ? { mcpUrl: this.options.mcpUrl, token: created.token }
       : { mcpUrl: this.options.mcpUrl, ...await this.issuePairing(created.bindingId) };
