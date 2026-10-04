@@ -24,42 +24,43 @@ export function summarizeInventory(body: DirectoryResponse): {
   emptyMessage: string | null;
 } {
   const scoped = body.scope.connectionId
-    ? '指定した接続の全件'
-    : '自分の全接続';
+    ? 'Selected connection'
+    : 'All of your connections';
+  const relationships = pairCount(body);
   if (body.connections.length === 0) {
     return {
-      heading: '接続一覧',
+      heading: 'Connections',
       checkedAt: sanitizeText(body.checkedAt),
-      completeness: `${scoped} / 全件取得済み`,
-      totals: '自分の登録 0件 / 関係 0組',
-      emptyMessage: '登録された接続はありません',
+      completeness: `${scoped} · complete`,
+      totals: '0 connections · 0 relationships',
+      emptyMessage: 'No connections are registered.',
     };
   }
   const contacts = body.connections.reduce((sum, row) => sum + row.contacts.length, 0);
   return {
-    heading: '接続一覧',
+    heading: 'Connections',
     checkedAt: sanitizeText(body.checkedAt),
-    completeness: `${scoped} / 全件取得済み`,
-    totals: `自分の登録 ${body.connections.length}件 / 関係 ${pairCount(body)}組`,
-    emptyMessage: contacts === 0 ? '許可された相手はありません' : null,
+    completeness: `${scoped} · complete`,
+    totals: `${body.connections.length} connections · ${relationships} ${relationships === 1 ? 'relationship' : 'relationships'}`,
+    emptyMessage: contacts === 0 ? 'No permitted contacts.' : null,
   };
 }
 
 export function errorGuidance(code: string): string {
   switch (code) {
     case 'unauthorized':
-      return '閲覧資格情報を確認し、運営へ再発行を依頼してください';
+      return 'Check the browsing credential, then ask an operator to reissue it.';
     case 'forbidden':
-      return '運営へ閲覧権限の確認を依頼してください';
+      return 'Ask an operator to confirm your directory access.';
     case 'connection_not_found':
-      return '自分の一覧と登録控えから接続IDを確認してください';
+      return 'Confirm the connection ID against your list and registration notes.';
     case 'inventory_too_large':
-      return '接続を絞るか運営へ相談してください';
+      return 'Narrow the connection filter, or ask an operator for help.';
     case 'rate_limited':
-      return '少し待ってから再実行してください';
+      return 'Wait a moment, then try again.';
     case 'invalid_request':
-      return '入力内容を確認してください';
+      return 'Check your input and try again.';
     default:
-      return '一覧を確認できませんでした。しばらくしてから再実行するか運営へ連絡してください';
+      return 'Could not load the list. Try again shortly, or contact an operator.';
   }
 }

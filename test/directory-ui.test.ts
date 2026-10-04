@@ -43,9 +43,9 @@ describe('directory UI helpers', () => {
         }],
       }],
     });
-    expect(summary.totals).toBe('自分の登録 2件 / 関係 1組');
+    expect(summary.totals).toBe('2 connections · 1 relationship');
     expect(summary.emptyMessage).toBeNull();
-    expect(errorGuidance('unauthorized')).toContain('再発行');
+    expect(errorGuidance('unauthorized')).toContain('reissue');
   });
 });
 
@@ -68,14 +68,19 @@ describe('directory UI routes', () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it('serves a CSP-protected page and assets only when enabled', async () => {
+  it('serves a CSP-protected English page with achromatic chrome', async () => {
     const app = buildApp(relay, { directory: { pool: db.pool, audience } });
     const page = await app.inject({ method: 'GET', url: '/directory' });
     expect(page.statusCode).toBe(200);
     expect(page.headers['cache-control']).toBe('no-store');
     expect(page.headers['content-security-policy']).toContain("default-src 'none'");
     expect(page.headers['content-security-policy']).toContain("connect-src 'self'");
+    expect(page.body).toContain('lang="en"');
     expect(page.body).toContain('Anybots');
+    expect(page.body).toContain('Show connections');
+    expect(page.body).toContain('Directory browsing key');
+    expect(page.body).not.toContain('一覧');
+    expect(page.body).not.toContain('閲覧鍵');
     expect(page.body).toContain('/directory/app.js');
     expect(page.body).not.toContain('sessionStorage');
     expect(page.body).not.toMatch(/Bearer /);
@@ -85,9 +90,14 @@ describe('directory UI routes', () => {
     expect(css.statusCode).toBe(200);
     expect(js.statusCode).toBe(200);
     expect(css.headers['cache-control']).toBe('no-store');
+    expect(css.body).toContain('--ink: #0d0d0d');
+    expect(css.body).toContain('--rail: #f8f8f8');
+    expect(css.body).not.toMatch(/#0f766e|#0d9488|teal|0f766e/i);
     expect(js.body).toContain('/v1/me/connections');
     expect(js.body).toContain('sessionStorage');
+    expect(js.body).toContain('Your connection');
     expect(js.body).not.toContain(audience);
+    expect(js.body).not.toContain('一覧を表示');
   });
 
   it('loads inventory through the shared API without exposing secrets in HTML', async () => {
@@ -111,7 +121,7 @@ describe('directory UI routes', () => {
     const page = await app.inject({ method: 'GET', url: '/directory' });
     expect(page.body).not.toContain(issued.secret);
     expect(page.body).not.toContain(a.token);
-    expect(page.body).toContain('一覧専用の閲覧鍵');
+    expect(page.body).toContain('Directory browsing key');
   });
 
   it('keeps connection filter available to the client script', async () => {

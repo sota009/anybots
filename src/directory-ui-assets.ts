@@ -2,22 +2,17 @@
 
 export const directoryUiCss = `
 :root {
-  --canvas-0: #e8f0f4;
-  --canvas-1: #f5f8fa;
-  --surface: rgba(255, 255, 255, 0.78);
-  --rail: rgba(247, 250, 252, 0.92);
-  --ink: #102027;
-  --muted: #5c6d75;
-  --line: rgba(16, 32, 39, 0.1);
-  --accent: #0f766e;
-  --accent-ink: #042f2e;
-  --accent-soft: rgba(15, 118, 110, 0.12);
-  --danger: #9f1239;
-  --ok: #166534;
-  --radius: 12px;
-  --shadow: 0 1px 0 var(--line);
-  --font-ui: "Outfit", "Avenir Next", "Helvetica Neue", sans-serif;
-  --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", serif;
+  --canvas: #ffffff;
+  --rail: #f8f8f8;
+  --ink: #0d0d0d;
+  --ink-soft: #34322d;
+  --muted: #5d5d5d;
+  --line: rgba(0, 0, 0, 0.08);
+  --veil: rgba(0, 0, 0, 0.04);
+  --veil-strong: rgba(0, 0, 0, 0.08);
+  --danger: #7f1d1d;
+  --radius: 10px;
+  --font-ui: "DM Sans", "Avenir Next", "Helvetica Neue", sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -25,42 +20,44 @@ html, body { margin: 0; min-height: 100%; }
 body {
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.5;
   background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(15, 118, 110, 0.18), transparent 55%),
-    radial-gradient(900px 500px at 90% 0%, rgba(30, 64, 80, 0.12), transparent 50%),
-    linear-gradient(180deg, var(--canvas-0), var(--canvas-1) 40%, #eef3f6);
+    radial-gradient(900px 420px at 12% -8%, rgba(0, 0, 0, 0.035), transparent 55%),
+    radial-gradient(700px 360px at 92% 0%, rgba(52, 50, 45, 0.04), transparent 50%),
+    var(--canvas);
 }
 
 button, input { font: inherit; }
 button {
   border: 0;
-  border-radius: 10px;
-  background: var(--accent);
+  border-radius: var(--radius);
+  background: var(--ink);
   color: #fff;
-  padding: 0.8rem 1.1rem;
+  padding: 0.75rem 1.05rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: transform 160ms ease, background 160ms ease;
+  transition: background 160ms ease, transform 160ms ease, opacity 160ms ease;
 }
-button:hover { background: #0d9488; }
+button:hover { background: #1a1a1a; }
 button:active { transform: translateY(1px); }
 button.secondary {
   background: transparent;
   color: var(--ink);
   box-shadow: inset 0 0 0 1px var(--line);
 }
-button.secondary:hover { background: rgba(16, 32, 39, 0.04); }
+button.secondary:hover { background: var(--veil); }
 input[type="password"] {
   width: 100%;
   border: 0;
-  border-radius: 10px;
-  background: #fff;
+  border-radius: var(--radius);
+  background: var(--canvas);
   box-shadow: inset 0 0 0 1px var(--line);
-  padding: 0.85rem 0.95rem;
+  padding: 0.8rem 0.9rem;
+  color: var(--ink);
 }
 input[type="password"]:focus {
-  outline: 2px solid rgba(15, 118, 110, 0.35);
+  outline: 2px solid rgba(13, 13, 13, 0.28);
   outline-offset: 1px;
 }
 
@@ -70,63 +67,70 @@ input[type="password"]:focus {
   padding: 2rem 1.25rem 3rem;
 }
 .brand-panel {
-  width: min(520px, 100%);
-  padding: 2.5rem 2rem 2rem;
-  border-radius: 20px;
-  background: var(--surface);
-  backdrop-filter: blur(10px);
-  box-shadow: var(--shadow);
+  width: min(440px, 100%);
+  padding: 2.75rem 0 1rem;
   animation: rise 420ms ease both;
 }
 .brand {
-  font-family: var(--font-display);
-  font-size: clamp(2.4rem, 6vw, 3.4rem);
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-  margin: 0 0 0.75rem;
+  font-size: clamp(2.6rem, 7vw, 3.6rem);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+  margin: 0 0 0.85rem;
+  color: var(--ink);
 }
 .lead {
-  margin: 0 0 1.5rem;
+  margin: 0 0 1.75rem;
   color: var(--muted);
-  max-width: 34ch;
+  max-width: 36ch;
+  font-size: 1.02rem;
 }
-.field { display: grid; gap: 0.45rem; margin-bottom: 1rem; }
-.field label { font-size: 0.92rem; font-weight: 500; }
+.field { display: grid; gap: 0.4rem; margin-bottom: 1rem; }
+.field label {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
 .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-.hint { margin: 1rem 0 0; color: var(--muted); font-size: 0.9rem; }
+.hint {
+  margin: 1.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  max-width: 42ch;
+}
 
 .app {
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 248px 1fr;
   min-height: 100vh;
 }
 .rail {
-  padding: 1.5rem 1rem;
+  padding: 1.35rem 0.9rem;
   background: var(--rail);
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.35rem;
   animation: slide 360ms ease both;
 }
 .rail .mark {
-  font-family: var(--font-display);
-  font-size: 1.45rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  padding: 0.35rem 0.6rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  padding: 0.4rem 0.65rem;
+  color: var(--ink);
 }
 .nav-item {
   display: block;
-  padding: 0.65rem 0.75rem;
-  border-radius: 10px;
-  background: var(--accent-soft);
-  color: var(--accent-ink);
+  padding: 0.6rem 0.7rem;
+  border-radius: var(--radius);
+  background: var(--veil-strong);
+  color: var(--ink);
   font-weight: 600;
   text-decoration: none;
 }
 .main {
-  padding: 2rem clamp(1rem, 3vw, 2.5rem) 3rem;
+  padding: 2rem clamp(1rem, 3vw, 2.75rem) 3rem;
+  max-width: 920px;
   animation: rise 480ms ease both;
 }
 .main-head {
@@ -134,28 +138,27 @@ input[type="password"]:focus {
   justify-content: space-between;
   gap: 1rem;
   align-items: flex-start;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.35rem;
 }
 .main-head h1 {
-  font-family: var(--font-display);
-  font-size: clamp(1.8rem, 3vw, 2.4rem);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  margin: 0 0 0.35rem;
-}
-.meta { color: var(--muted); font-size: 0.92rem; }
-.totals {
-  margin: 0 0 1.25rem;
+  font-size: clamp(1.65rem, 2.8vw, 2.1rem);
   font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.3rem;
 }
-.list { display: grid; gap: 0.85rem; }
+.meta { color: var(--muted); font-size: 0.9rem; }
+.totals {
+  margin: 0 0 1.1rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.list { display: grid; gap: 0; }
 .connection {
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  padding: 1rem 1.1rem;
+  padding: 1.05rem 0;
+  border-top: 1px solid var(--line);
   animation: rise 500ms ease both;
 }
+.connection:first-child { border-top: 0; padding-top: 0.2rem; }
 .connection:nth-child(2) { animation-delay: 40ms; }
 .connection:nth-child(3) { animation-delay: 80ms; }
 .connection-top {
@@ -163,67 +166,68 @@ input[type="password"]:focus {
   justify-content: space-between;
   gap: 1rem;
   align-items: baseline;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.55rem;
 }
 .provider {
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  color: var(--ink);
 }
 .badge {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-  background: rgba(22, 101, 52, 0.12);
-  color: var(--ok);
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  background: var(--veil-strong);
+  color: var(--ink-soft);
 }
 .badge.off {
-  background: rgba(159, 18, 57, 0.1);
-  color: var(--danger);
+  background: transparent;
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 .uuid {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   color: var(--muted);
   word-break: break-all;
 }
-.contacts { display: grid; gap: 0.55rem; margin-top: 0.85rem; }
+.contacts { display: grid; gap: 0.45rem; margin-top: 0.75rem; }
 .contact {
-  padding: 0.7rem 0.8rem;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.7);
-  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 0.7rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--rail);
 }
-.contact strong { font-weight: 600; }
+.contact strong { font-weight: 600; color: var(--ink); }
 .contact dl {
   margin: 0.35rem 0 0;
   display: grid;
-  gap: 0.2rem;
+  gap: 0.18rem;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 .contact div { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.contact dt { font-weight: 600; color: var(--ink); }
+.contact dt { font-weight: 600; color: var(--ink-soft); }
 .contact dd { margin: 0; }
 .empty, .error, .footnote {
   color: var(--muted);
 }
 .error {
   color: var(--danger);
-  background: rgba(159, 18, 57, 0.06);
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
+  background: rgba(127, 29, 29, 0.05);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.95rem;
   margin-bottom: 1rem;
 }
-.footnote { margin-top: 1.5rem; font-size: 0.9rem; }
+.footnote { margin-top: 1.5rem; font-size: 0.88rem; }
 .hidden { display: none !important; }
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes slide {
-  from { opacity: 0; transform: translateX(-8px); }
+  from { opacity: 0; transform: translateX(-6px); }
   to { opacity: 1; transform: translateX(0); }
 }
 
@@ -235,9 +239,10 @@ input[type="password"]:focus {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    padding: 1rem;
+    padding: 0.9rem 1rem;
   }
   .main-head { flex-direction: column; }
+  .brand-panel { padding-top: 1.5rem; }
 }
 `;
 
@@ -261,13 +266,13 @@ function sanitize(value) {
 
 function guidance(code) {
   switch (code) {
-    case "unauthorized": return "閲覧資格情報を確認し、運営へ再発行を依頼してください";
-    case "forbidden": return "運営へ閲覧権限の確認を依頼してください";
-    case "connection_not_found": return "自分の一覧と登録控えから接続IDを確認してください";
-    case "inventory_too_large": return "接続を絞るか運営へ相談してください";
-    case "rate_limited": return "少し待ってから再実行してください";
-    case "invalid_request": return "入力内容を確認してください";
-    default: return "一覧を確認できませんでした。しばらくしてから再実行するか運営へ連絡してください";
+    case "unauthorized": return "Check the browsing credential, then ask an operator to reissue it.";
+    case "forbidden": return "Ask an operator to confirm your directory access.";
+    case "connection_not_found": return "Confirm the connection ID against your list and registration notes.";
+    case "inventory_too_large": return "Narrow the connection filter, or ask an operator for help.";
+    case "rate_limited": return "Wait a moment, then try again.";
+    case "invalid_request": return "Check your input and try again.";
+    default: return "Could not load the list. Try again shortly, or contact an operator.";
   }
 }
 
@@ -286,20 +291,20 @@ function showApp() {
 function render(body) {
   listError.classList.add("hidden");
   listError.textContent = "";
-  const scoped = body.scope.connectionId ? "指定した接続の全件" : "自分の全接続";
-  summary.textContent = "取得開始: " + sanitize(body.checkedAt) + " · " + scoped + " / 全件取得済み";
+  const scoped = body.scope.connectionId ? "Selected connection" : "All of your connections";
+  summary.textContent = "Fetched " + sanitize(body.checkedAt) + " · " + scoped + " · complete";
   const seen = new Set();
   for (const connection of body.connections) {
     for (const contact of connection.contacts) {
       seen.add([connection.connectionId, contact.connectionId].sort().join(":"));
     }
   }
-  totals.textContent = "自分の登録 " + body.connections.length + "件 / 関係 " + seen.size + "組";
+  totals.textContent = body.connections.length + " connections · " + seen.size + " " + (seen.size === 1 ? "relationship" : "relationships");
   listRoot.replaceChildren();
   if (!body.connections.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "登録された接続はありません";
+    empty.textContent = "No connections are registered.";
     listRoot.append(empty);
     return;
   }
@@ -313,14 +318,14 @@ function render(body) {
     const title = document.createElement("div");
     const provider = document.createElement("div");
     provider.className = "provider";
-    provider.textContent = "自分の接続: " + sanitize(connection.provider);
+    provider.textContent = "Your connection · " + sanitize(connection.provider);
     const id = document.createElement("div");
     id.className = "uuid";
-    id.textContent = "接続ID: " + sanitize(connection.connectionId);
+    id.textContent = "Connection ID · " + sanitize(connection.connectionId);
     title.append(provider, id);
     const badge = document.createElement("span");
     badge.className = "badge" + (connection.registration === "active" ? "" : " off");
-    badge.textContent = connection.registration === "active" ? "登録 有効" : "登録 無効";
+    badge.textContent = connection.registration === "active" ? "Active" : "Disabled";
     top.append(title, badge);
     article.append(top);
     const contacts = document.createElement("div");
@@ -328,19 +333,19 @@ function render(body) {
     if (!connection.contacts.length) {
       const none = document.createElement("p");
       none.className = "empty";
-      none.textContent = "許可された相手はありません";
+      none.textContent = "No permitted contacts.";
       contacts.append(none);
     }
     for (const contact of connection.contacts) {
       const row = document.createElement("div");
       row.className = "contact";
       const head = document.createElement("strong");
-      head.textContent = "相手: " + sanitize(contact.provider) + " / " + sanitize(contact.connectionId);
+      head.textContent = "Contact · " + sanitize(contact.provider) + " / " + sanitize(contact.connectionId);
       const dl = document.createElement("dl");
       const rows = [
-        ["登録上の持ち主", contact.sameOwner ? "自分" : "他人"],
-        ["通信許可", "記録あり（運営設定）"],
-        ["登録上の通信条件", contact.registrationAllowsCommunication ? "有効" : "無効"],
+        ["Registered owner", contact.sameOwner ? "You" : "Someone else"],
+        ["Communication permission", "Recorded (operator)"],
+        ["Registration allows communication", contact.registrationAllowsCommunication ? "Yes" : "No"],
       ];
       for (const [label, value] of rows) {
         const wrap = document.createElement("div");
@@ -360,7 +365,7 @@ function render(body) {
   if (contactRows === 0) {
     const note = document.createElement("p");
     note.className = "empty";
-    note.textContent = "許可された相手はありません";
+    note.textContent = "No permitted contacts.";
     listRoot.append(note);
   }
 }
@@ -405,7 +410,7 @@ form.addEventListener("submit", async (event) => {
   const secret = secretInput.value.trim();
   unlockError.classList.add("hidden");
   if (secret.length < 32 || secret.length > 256) {
-    showUnlock("閲覧資格情報を確認し、運営へ再発行を依頼してください");
+    showUnlock("Check the browsing credential, then ask an operator to reissue it.");
     return;
   }
   try {
@@ -440,40 +445,40 @@ if (existing) {
 
 export function directoryUiHtml(): string {
   return `<!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>Anybots 接続一覧</title>
+  <title>Anybots Connections</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/directory/app.css">
 </head>
 <body>
   <main id="unlock" class="shell unlock">
     <section class="brand-panel">
       <h1 class="brand">Anybots</h1>
-      <p class="lead">登録済みのAI接続と、直結している相手だけを確認します。本文は開きません。</p>
+      <p class="lead">Review your registered AI connections and direct contacts. Message bodies stay closed.</p>
       <p id="unlock-error" class="error hidden" role="alert"></p>
       <form id="unlock-form">
         <div class="field">
-          <label for="secret">一覧専用の閲覧鍵</label>
+          <label for="secret">Directory browsing key</label>
           <input id="secret" name="secret" type="password" autocomplete="off" maxlength="256" required>
         </div>
         <div class="actions">
-          <button type="submit">一覧を表示</button>
+          <button type="submit">Show connections</button>
         </div>
       </form>
-      <p class="hint">鍵はこのブラウザの一時領域にだけ置き、ページを閉じると消えます。チャットへ貼らないでください。</p>
+      <p class="hint">The key stays in this browser session only and clears when the page closes. Do not paste it into chat.</p>
     </section>
   </main>
   <div id="app" class="shell app hidden">
     <aside class="rail">
       <div class="mark">Anybots</div>
       <a class="nav-item" href="/directory">Connections</a>
-      <button id="clear-secret" class="secondary" type="button">この端末の閲覧鍵を消す</button>
+      <button id="clear-secret" class="secondary" type="button">Clear browsing key</button>
     </aside>
     <section class="main">
       <header class="main-head">
@@ -485,7 +490,7 @@ export function directoryUiHtml(): string {
       <p id="list-error" class="error hidden" role="alert"></p>
       <p id="totals" class="totals"></p>
       <div id="list" class="list"></div>
-      <p class="footnote">個別AIの識別・現在のオンライン状態・外部操作権限は未確認です。</p>
+      <p class="footnote">Per-agent identity, live online status, and external tool authority are unverified.</p>
     </section>
   </div>
   <script src="/directory/app.js" defer></script>
