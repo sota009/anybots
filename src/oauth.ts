@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildOAuthProtectedResourceMetadata, getOAuthProtectedResourceMetadataUrl, OAuthError, type AuthInfo } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { lockRelay, withTransaction } from './db.js';
+import { clientAddress } from './web.js';
 
 const scope = 'relay';
 const opaque = () => randomBytes(32).toString('base64url');
@@ -20,7 +21,7 @@ const scalar = z.string().min(1).max(2048);
 interface Pending { client_id: string; redirect_uri: string; resource: string; state: string; scope: string; challenge: string; cookie_hash: string; attempts: number }
 interface Code extends Pending { binding_id: string; consumed: boolean; family_id: string | null }
 interface Family { id: string; binding_id: string; client_id: string; resource: string; scope: string; expires_at: Date; revoked: boolean }
-export interface OAuthOptions { issuer: string; redirectUris: string[]; allowInsecureLocalhost?: boolean; allowNativeLoopback?: boolean }
+export interface OAuthOptions { issuer: string; redirectUris: string[]; allowInsecureLocalhost?: boolean; allowNativeLoopback?: boolean; trustProxyHops?: number }
 
 /** Deliberately bounded operator-provisioned pilot, not a general identity provider. */
 export class OAuthPilot {
@@ -30,6 +31,7 @@ export class OAuthPilot {
   private readonly secure: boolean;
   private readonly redirects: Set<string>;
   private readonly allowNativeLoopback: boolean;
+  private readonly trustProxyHops: number;
   constructor(private readonly pool: Pool, options: OAuthOptions) {
     const issuer = new URL(options.issuer);
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(issuer.hostname);
@@ -40,6 +42,7 @@ export class OAuthPilot {
     this.resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(new URL(this.resource));
     this.secure = issuer.protocol === 'https:';
     this.allowNativeLoopback = options.allowNativeLoopback ?? false;
+    this.trustProxyHops = options.trustProxyHops ?? 0;
     if (!options.redirectUris.length || options.redirectUris.length > 4) throw new Error('Exact OAuth redirect allowlist required');
     this.redirects = new Set(options.redirectUris.map(value => {
       const url = new URL(value);
@@ -106,7 +109,7 @@ export class OAuthPilot {
       const minute = Math.floor(Date.now() / 60_000);
       // Rejected sources must not consume the shared allowance for other clients.
       // Both admissions remain atomic under the existing relay transaction lock.
-      for (const [key, limit] of [[`ip:${hash(request.ip)}:${endpoint}:${minute}`, 20], [`all:${endpoint}:${minute}`, 100]] as const) {
+      for (const [key, limit] of [[`ip:${hash(clientAddress(request, this.trustProxyHops))}:${endpoint}:${minute}`, 20], [`all:${endpoint}:${minute}`, 100]] as const) {
         const result = await client.query('INSERT INTO oauth_rates(bucket,hits,expires_at) VALUES($1,1,clock_timestamp()+interval \'2 minutes\') ON CONFLICT(bucket) DO UPDATE SET hits=oauth_rates.hits+1 RETURNING hits', [key]);
         if (result.rows[0].hits > limit) return false;
       }

@@ -9,5 +9,6 @@ export function oauthFromEnvironment(pool: Pool, env: NodeJS.ProcessEnv = proces
   catch { throw new Error('OAUTH_REDIRECT_URIS must be a JSON array of exact approved callback URLs'); }
   return new OAuthPilot(pool, { issuer: env.OAUTH_ISSUER, redirectUris,
     allowNativeLoopback: env.OAUTH_ALLOW_NATIVE_LOOPBACK === 'true',
+    trustProxyHops: Number(env.TRUST_PROXY_HOPS ?? '0'),
     allowInsecureLocalhost: env.OAUTH_ALLOW_HTTP_LOCALHOST === 'true' && env.NODE_ENV !== 'production' });
 }
