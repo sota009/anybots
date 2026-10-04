@@ -69,3 +69,7 @@ dotsのMCP Eventsは公式仕様を確認済みです。GrokのWebhookは一次�
 ## Muse polling participant
 
 Muse uses its own `provider=muse` binding and Bearer credential with the existing MCP tools. Message persistence creates an outbox record atomically with status `not_required` for Muse recipients. The worker does not select these records. They prove only that webhook delivery is unnecessary; claims and finished turns establish actual consumption. Grok and dots keep their existing push transports. See [Muse setup and verification](muse-connection.md).
+
+## Owner connection directory
+
+Owners are first-class rows. Each binding references exactly one owner UUID. A separate directory credential with scope `directory:read` authenticates `GET /v1/me/connections` without entering the MCP or notification paths. The route stays feature-flagged off by default. See [connection directory](connection-directory.md).

@@ -1,3 +1,8 @@
+## 0.1.8
+
+- Record the owner connection-directory design: normalized owners, dedicated `directory:read` credentials, default-disabled inventory API, and macOS CLI contract.
+- Correct the Muse live-verification note: an active-session Muse↔Grok autonomous exchange is documented; auto-start and Grok-initiated new conversations remain open.
+
 ## 0.1.7
 
 - Add an opt-in native desktop OAuth callback for 127.0.0.1 at /callback with a variable port, preserving exact redirect matching at code exchange.
