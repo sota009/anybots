@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { EventSubscriptions, INBOX_EVENT, type EventAuthorization } from '../src/events.js';
 import { ProviderDispatcher, type Notification } from '../src/providers/index.js';
 import { lockRelay, withTransaction } from '../src/db.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, testDatabase } from './helpers.js';
 
 describe('event subscriptions retain their connector authority', () => {
   let db: Awaited<ReturnType<typeof testDatabase>>; let pool: Pool;
@@ -28,8 +28,9 @@ describe('event subscriptions retain their connector authority', () => {
   beforeEach(async () => {
     await pool.query('TRUNCATE bindings,oauth_clients CASCADE');
     bindingId = randomUUID(); familyId = randomUUID();
+    const ownerId = await createOwner(pool);
     await pool.query(`INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash)
-      VALUES($1,'owner','runtime','dots','unused-test-token-hash')`, [bindingId]);
+      VALUES($1,$2,'runtime','dots','unused-test-token-hash')`, [bindingId, ownerId]);
     await pool.query(`INSERT INTO oauth_clients(id,redirect_uris,name) VALUES('test-client','[]','Test client')`);
     await pool.query(`INSERT INTO oauth_families(id,binding_id,client_id,resource,scope,expires_at)
       VALUES($1,$2,'test-client','https://relay.example.com/mcp','relay',clock_timestamp()+interval '1 day')`, [familyId, bindingId]);

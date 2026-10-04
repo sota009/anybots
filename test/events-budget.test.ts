@@ -3,7 +3,7 @@ import pg, { type Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventSubscriptions, INBOX_EVENT } from '../src/events.js';
 import { lockRelay, withTransaction } from '../src/db.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, testDatabase } from './helpers.js';
 
 describe('durable callback verification budgets', () => {
   let db: Awaited<ReturnType<typeof testDatabase>>; let pool: Pool; let bindingId: string;
@@ -14,8 +14,9 @@ describe('durable callback verification budgets', () => {
   const instance = () => new EventSubscriptions(pool, { encryptionKey, transport: { post } });
   const binding = async () => {
     const id = randomUUID();
+    const ownerId = await createOwner(pool);
     await pool.query(`INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash)
-      VALUES($1,$2,$3,'dots',$4)`, [id, randomUUID(), randomUUID(), randomUUID()]);
+      VALUES($1,$2,$3,'dots',$4)`, [id, ownerId, randomUUID(), randomUUID()]);
     return id;
   };
   const seed = async (period: 'hour' | 'day' | 'month', subject: string, attempts: number) => {

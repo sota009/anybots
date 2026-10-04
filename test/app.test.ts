@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { buildApp } from '../src/app.js';
 import { Relay } from '../src/relay.js';
 import { EventSubscriptions } from '../src/events.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
 describe('authenticated stateless MCP over PostgreSQL', () => {
   let db: Awaited<ReturnType<typeof testDatabase>>;
@@ -27,9 +27,9 @@ describe('authenticated stateless MCP over PostgreSQL', () => {
     await db?.close();
   });
   beforeEach(async () => {
-    a = await relay.provisionBinding({ ownerId: crypto.randomUUID(), runtimeScope: crypto.randomUUID(), provider: 'dots' });
-    b = await relay.provisionBinding({ ownerId: crypto.randomUUID(), runtimeScope: crypto.randomUUID(), provider: 'grok' });
-    outsider = await relay.provisionBinding({ ownerId: crypto.randomUUID(), runtimeScope: crypto.randomUUID(), provider: 'dots' });
+    a = await provision(relay, db.pool, { provider: 'dots' });
+    b = await provision(relay, db.pool, { provider: 'grok' });
+    outsider = await provision(relay, db.pool, { provider: 'dots' });
     await relay.grantPair(a.bindingId, b.bindingId);
   });
   async function connect(token: string) {

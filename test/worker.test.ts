@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { Relay } from '../src/relay.js';
 import { dispatchOne } from '../src/worker.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 import { ProviderDispatcher, type Notification, type DeliveryResult } from '../src/providers/index.js';
 import pg from 'pg';
 
@@ -13,8 +13,8 @@ beforeAll(async () => { db = await testDatabase(); relay = new Relay(db.pool); }
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
   await db.pool.query('TRUNCATE bindings CASCADE');
-  a = await relay.provisionBinding({ ownerId: crypto.randomUUID(), runtimeScope: crypto.randomUUID(), provider: 'dots' });
-  b = await relay.provisionBinding({ ownerId: crypto.randomUUID(), runtimeScope: crypto.randomUUID(), provider: 'grok' });
+  a = await provision(relay, db.pool, { provider: 'dots' });
+  b = await provision(relay, db.pool, { provider: 'grok' });
   await relay.grantPair(a.bindingId, b.bindingId);
   conversation = await relay.conversationOpen(a.token, { recipientBindingId: b.bindingId, text: 'private content', expectsReply: true, idempotencyKey: crypto.randomUUID() });
 });

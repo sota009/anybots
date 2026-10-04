@@ -6,12 +6,13 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { admin } from '../src/admin.js';
 import { buildApp } from '../src/app.js';
+import { DirectoryRegistry } from '../src/directory.js';
 import { EventSubscriptions } from '../src/events.js';
 import { ProviderDispatcher } from '../src/providers/index.js';
 import { readiness } from '../src/readiness.js';
 import { Relay } from '../src/relay.js';
 import { dispatchOne } from '../src/worker.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
 let db: Awaited<ReturnType<typeof testDatabase>>;
 let relay: Relay;
@@ -21,14 +22,22 @@ beforeAll(async () => { db = await testDatabase(); relay = new Relay(db.pool); }
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
   await db.pool.query('TRUNCATE bindings CASCADE');
-  muse = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'muse' });
-  grok = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'grok' });
+  muse = await provision(relay, db.pool, { provider: 'muse' });
+  grok = await provision(relay, db.pool, { provider: 'grok' });
 });
 
 it('provisions a Muse credential privately and reports polling without claiming notifications are configured', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'anybots-muse-'));
   try {
-    const result = await admin(relay, { action: 'provision', ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'muse' }, directory);
+    const ownerId = await createOwner(db.pool);
+    const result = await admin(
+      relay,
+      { action: 'provision', ownerId, runtimeScope: randomUUID(), provider: 'muse' },
+      directory,
+      undefined,
+      undefined,
+      new DirectoryRegistry(db.pool),
+    );
     expect(result).not.toHaveProperty('token');
     if (!('credentialsFile' in result)) throw new Error('Expected credentials file');
     const secret = JSON.parse(await readFile(result.credentialsFile, 'utf8'));

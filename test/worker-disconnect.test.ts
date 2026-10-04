@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 import pg from 'pg';
 import { Relay } from '../src/relay.js';
 import { dispatchOne } from '../src/worker.js';
-import { testDatabase } from './helpers.js';
+import { provision, testDatabase } from './helpers.js';
 
 let db: Awaited<ReturnType<typeof testDatabase>>;
 beforeAll(async () => { db = await testDatabase(); });
@@ -10,8 +10,8 @@ afterAll(async () => { await db?.close(); });
 
 it('aborts delivery after DB disconnect and preserves uncertain intent without replay', async () => {
   const relay = new Relay(db.pool);
-  const a = await relay.provisionBinding({ ownerId: 'disconnect-a', runtimeScope: 'disconnect-a', provider: 'dots' });
-  const b = await relay.provisionBinding({ ownerId: 'disconnect-b', runtimeScope: 'disconnect-b', provider: 'grok' });
+  const a = await provision(relay, db.pool, { provider: 'dots', runtimeScope: 'disconnect-a' });
+  const b = await provision(relay, db.pool, { provider: 'grok', runtimeScope: 'disconnect-b' });
   await relay.grantPair(a.bindingId, b.bindingId);
   const conversation = await relay.conversationOpen(a.token, {
     recipientBindingId: b.bindingId, text: 'Disconnect regression', expectsReply: true, idempotencyKey: 'disconnect',

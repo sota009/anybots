@@ -2,6 +2,8 @@
 
 - Record the owner connection-directory design: normalized owners, dedicated `directory:read` credentials, default-disabled inventory API, and macOS CLI contract.
 - Correct the Muse live-verification note: an active-session Muse↔Grok autonomous exchange is documented; auto-start and Grok-initiated new conversations remain open.
+- Replace free-form binding owner labels with `owners.id` foreign keys and align `delivery_attempts.owner_id`.
+- Add operator `create_owner` plus directory credential issue/revoke/disable with private local credential files.
 
 ## 0.1.7
 

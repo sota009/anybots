@@ -4,7 +4,7 @@ import { buildApp } from '../src/app.js';
 import { EventSubscriptions } from '../src/events.js';
 import { OAuthPilot } from '../src/oauth.js';
 import { Relay } from '../src/relay.js';
-import { testDatabase } from './helpers.js';
+import { createOwner, provision, testDatabase } from './helpers.js';
 
 let db: Awaited<ReturnType<typeof testDatabase>>;
 beforeAll(async () => { db = await testDatabase(); });
@@ -15,7 +15,7 @@ it.each(['revocation', 'expiry'] as const)('rejects an MCP subscription when OAu
     issuer: 'https://relay.example.test', redirectUris: ['https://client.example.test/callback'],
   });
   const relay = new Relay(db.pool, { oauthResource: oauth.resource });
-  const binding = await relay.provisionBinding({ ownerId: randomUUID(), runtimeScope: randomUUID(), provider: 'dots' });
+  const binding = await provision(relay, db.pool, { provider: 'dots' });
   const accessToken = randomBytes(32).toString('base64url');
   const tokenHash = createHash('sha256').update(accessToken).digest('hex');
   const familyId = randomUUID(), clientId = randomUUID();
