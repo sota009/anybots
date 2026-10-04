@@ -37,7 +37,7 @@ export async function dispatchOne(pool: Pool, dispatcher: NotificationDispatcher
     await client.query('BEGIN'); inTransaction = true;
     const rows = await client.query<{
       id: string; binding_id: string; conversation_id: string; message_id: string;
-      provider: 'dots' | 'grok'; owner_id: string; attempts: number; created_at: Date; attempt_at: Date;
+      provider: 'dots' | 'grok' | 'muse'; owner_id: string; attempts: number; created_at: Date; attempt_at: Date;
       valid: boolean;
     }>(`SELECT o.*, b.provider, b.owner_id, now() AS attempt_at,
        (b.active AND a.active AND z.active AND c.status='open' AND c.epoch=o.epoch

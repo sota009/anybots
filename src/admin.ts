@@ -12,7 +12,7 @@ import { notificationOptions } from './config.js';
 
 const provision = z.strictObject({
   action: z.literal('provision'), ownerId: z.string().min(1).max(200),
-  runtimeScope: z.string().min(1).max(200), provider: z.enum(['dots', 'grok']),
+  runtimeScope: z.string().min(1).max(200), provider: z.enum(['dots', 'grok', 'muse']),
 });
 const pair = z.strictObject({
   action: z.enum(['grant', 'revoke']), a: z.uuid(), b: z.uuid(),

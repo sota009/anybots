@@ -20,7 +20,7 @@ JSON
 | `peer` | 指定した相手の存在、有効状態、両者の通信許可。相手を省略した場合は`null` |
 | `notification` | 通知設定の読込状態。dotsは有効な購読件数、Grokは実験設定とWebhook設定の有無 |
 | `messages` | 送信・受信したメッセージの件数 |
-| `outbox` | `pending`、`accepted`、`failed`、`uncertain`、`cancelled`ごとの配送件数 |
+| `outbox` | `pending`、`accepted`、`failed`、`uncertain`、`cancelled`、`not_required`ごとの配送件数 |
 | `liveVerification` | この診断では実AIの往復を検証しないため、常に`not_verified` |
 
 OAuthの件数は、この環境のMCPリソースに対する`relay`権限を持ち、有効期限内で失効していない認可だけを数えます。接続が無効なら0件です。dots購読も有効期限と接続状態を確認し、OAuthに紐づく場合は認可の失効・期限切れを除外します。通知設定の`configured`は実行環境の設定を読み込めたことを示し、対象接続が有効かどうかは`binding.active`で別に確認します。
@@ -34,3 +34,5 @@ OAuthの件数は、この環境のMCPリソースに対する`relay`権限を�
 出力は状態と件数に限定します。本文、所有者、実行環境の識別子、トークン、Cookie、通知URL、秘密値、秘密ファイルのパス、個別のメッセージIDは出しません。既存の接続や権限を変更せず、外部HTTPも送信しません。
 
 複数の集計は読み取り専用トランザクションの同じスナップショットで取得します。診断は取得時点の状態であり、表示後の失効や設定変更を予約・阻止するものではありません。接続成功の判定には、両方の実アカウントでOAuth接続を行い、通知から受信・返信・元のAIの再開まで別途確認します。
+
+Museでは`notification.mode=poll`、`configured=false`を返します。`not_required`は通知を送らずに受信待ちとした件数です。Museの受信成功は、受信処理と返信の記録で別に確認します。

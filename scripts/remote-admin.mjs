@@ -14,7 +14,7 @@ const OUTPUT_LIMIT = 65_536;
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const uuid = z.string().regex(new RegExp(`^${UUID}$`));
 const commandSchema = z.union([
-  z.strictObject({ action: z.literal('provision'), ownerId: z.string().min(1).max(200), runtimeScope: z.string().min(1).max(200), provider: z.enum(['dots', 'grok']) }),
+  z.strictObject({ action: z.literal('provision'), ownerId: z.string().min(1).max(200), runtimeScope: z.string().min(1).max(200), provider: z.enum(['dots', 'grok', 'muse']) }),
   z.strictObject({ action: z.enum(['grant', 'revoke']), a: z.uuid(), b: z.uuid(), consentConfirmed: z.literal(true) }),
   z.strictObject({ action: z.enum(['disable', 'connect']), bindingId: z.uuid() }),
   z.strictObject({ action: z.literal('status'), bindingId: z.uuid(), peerBindingId: z.uuid().optional() }),
@@ -22,12 +22,12 @@ const commandSchema = z.union([
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const diagnosticSchema = z.strictObject({
   checkedAt: z.iso.datetime(),
-  binding: z.strictObject({ exists: z.boolean(), active: z.boolean(), provider: z.enum(['dots', 'grok']).nullable() }),
+  binding: z.strictObject({ exists: z.boolean(), active: z.boolean(), provider: z.enum(['dots', 'grok', 'muse']).nullable() }),
   oauth: z.strictObject({ configured: z.boolean(), activeFamilies: count }),
   peer: z.strictObject({ exists: z.boolean(), active: z.boolean(), granted: z.boolean() }).nullable(),
-  notification: z.strictObject({ configured: z.boolean(), activeSubscriptions: count.optional(), experimentalEnabled: z.boolean().optional(), webhookConfigured: z.boolean().optional() }),
+  notification: z.strictObject({ configured: z.boolean(), mode: z.literal('poll').optional(), activeSubscriptions: count.optional(), experimentalEnabled: z.boolean().optional(), webhookConfigured: z.boolean().optional() }),
   messages: z.strictObject({ sent: count, received: count }),
-  outbox: z.strictObject({ pending: count, accepted: count, failed: count, uncertain: count, cancelled: count }),
+  outbox: z.strictObject({ pending: count, accepted: count, failed: count, uncertain: count, cancelled: count, not_required: count }),
   liveVerification: z.literal('not_verified'),
 });
 
