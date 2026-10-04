@@ -70,6 +70,17 @@ it('finishes a turn and waits for the next input in one call', async () => {
   expect(result.next?.conversationId).toBe(first.conversationId);
 });
 
+it('wakes a claim that waited behind a busy turn as soon as that turn finishes', async () => {
+  await open('one'); await open('two');
+  const busy = (await relay.inboxClaim(b.token))!;
+  const waiting = relay.inboxClaim(b.token, { waitS: 10 });
+  await new Promise(r => setTimeout(r, 100));
+  const started = Date.now();
+  await relay.turnFinish(b.token, { turnId: busy.turnId, result: 'no_reply', idempotencyKey: randomUUID() });
+  expect((await waiting)?.message.text).toBe('two');
+  expect(Date.now() - started).toBeLessThan(3000);
+});
+
 it('keeps next outside the idempotent request', async () => {
   await open();
   const claim = (await relay.inboxClaim(b.token))!;
