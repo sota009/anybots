@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anybots 全体プラン</title>
+<style>
+  :root { --ink:#0d0d0d; --ink2:#34322d; --muted:#5d5d5d; --line:rgba(0,0,0,.08); --soft:#f8f8f8; --card:#fff; --warn:#7a4b00; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.75 "DM Sans","Hiragino Sans","Noto Sans JP",system-ui,sans-serif; color:var(--ink); background:#fff; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,1fr); min-height:100vh; }
+  nav { position:sticky; top:0; height:100vh; overflow:auto; background:var(--soft); border-right:1px solid var(--line); padding:28px 18px; font-size:13px; }
+  nav b { display:block; font-size:16px; margin-bottom:16px; }
+  nav a { display:block; color:var(--muted); text-decoration:none; padding:5px 8px; border-radius:8px; }
+  nav a:hover { background:#ececec; color:var(--ink); }
+  main { max-width:1000px; padding:44px 56px 120px; }
+  h1 { font-size:32px; line-height:1.3; margin:0 0 6px; letter-spacing:-.01em; }
+  h2 { font-size:22px; margin:64px 0 12px; padding-top:12px; border-top:1px solid var(--line); }
+  h3 { font-size:16px; margin:28px 0 8px; }
+  p, li { color:var(--ink2); }
+  .lead { color:var(--muted); margin:0 0 28px; }
+  .tldr { background:var(--soft); border:1px solid var(--line); border-radius:14px; padding:20px 24px; }
+  .tldr li { margin:6px 0; }
+  table { width:100%; border-collapse:collapse; margin:12px 0 20px; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 10px; border-bottom:1px solid var(--line); }
+  th { font-weight:600; color:var(--ink); background:var(--soft); }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; background:var(--soft); border:1px solid var(--line); border-radius:5px; padding:1px 5px; }
+  pre { background:var(--soft); border:1px solid var(--line); border-radius:12px; padding:14px 16px; overflow:auto; font-size:12.5px; line-height:1.6; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:600; border:1px solid var(--line); border-radius:999px; padding:1px 8px; color:var(--muted); background:#fff; }
+  .tag.dark { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .note { border-left:3px solid var(--ink); padding:4px 0 4px 14px; color:var(--muted); }
+  .warn { color:var(--warn); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .card { border:1px solid var(--line); border-radius:14px; padding:16px 18px; background:var(--card); }
+  .card h4 { margin:0 0 6px; font-size:14.5px; }
+  .card p { margin:0; font-size:14px; }
+  /* Wireframes */
+  .frame { border:1px solid var(--line); border-radius:16px; overflow:hidden; margin:14px 0 26px; box-shadow:0 1px 0 rgba(0,0,0,.02); }
+  .frame .bar { background:var(--soft); border-bottom:1px solid var(--line); font-size:12px; color:var(--muted); padding:7px 12px; }
+  .app { display:grid; grid-template-columns:170px 1fr; min-height:300px; font-size:13px; }
+  .rail { background:var(--soft); border-right:1px solid var(--line); padding:14px 10px; }
+  .rail div { padding:6px 10px; border-radius:8px; color:var(--muted); }
+  .rail .on { background:#e9e9e9; color:var(--ink); font-weight:600; }
+  .pane { padding:16px 20px; }
+  .row { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
+  .av { width:28px; height:28px; border-radius:50%; background:#e4e4e4; display:grid; place-items:center; font-size:11px; font-weight:700; color:var(--ink2); flex:none; }
+  .grow { flex:1; min-width:0; }
+  .sub { color:var(--muted); font-size:12px; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--ink); display:inline-block; margin-right:6px; }
+  .dot.off { background:#bdbdbd; }
+  .btn { display:inline-block; font-size:12px; font-weight:600; padding:5px 11px; border-radius:999px; background:var(--ink); color:#fff; }
+  .btn.ghost { background:#fff; color:var(--ink); border:1px solid var(--line); }
+  .link-graph { display:grid; grid-template-columns:1fr 60px 1fr; align-items:center; gap:6px; margin:6px 0 14px; }
+  .lg-box { border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+  .lg-mid { text-align:center; color:var(--muted); font-size:18px; }
+  .timeline div { padding:6px 0 6px 14px; border-left:2px solid var(--line); margin-left:4px; font-size:12.5px; }
+  .perm { display:grid; grid-template-columns:1fr auto; gap:6px 12px; font-size:12.5px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
+  .seg span { padding:2px 9px; font-size:11.5px; color:var(--muted); }
+  .seg .on { background:var(--ink); color:#fff; }
+  @media (max-width: 860px) { .wrap { grid-template-columns:1fr; } nav { position:static; height:auto; } main { padding:28px 20px 80px; } .grid2 { grid-template-columns:1fr; } .app { grid-template-columns:1fr; } .rail { display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <b>Anybots プラン</b>
+  <a href="#tldr">結論</a>
+  <a href="#diagnosis">現状の診断</a>
+  <a href="#transport">接続方式の比較</a>
+  <a href="#matrix">組み合わせ別の最適経路</a>
+  <a href="#speed">超高速ラリーの設計</a>
+  <a href="#cost">お金と時間の無駄</a>
+  <a href="#product">プロダクトの姿</a>
+  <a href="#screens">画面イメージ</a>
+  <a href="#permissions">許可と追跡</a>
+  <a href="#strategy">勝ち筋</a>
+  <a href="#mvp">MVPと段階計画</a>
+  <a href="#unverified">未検証の前提</a>
+  <a href="#docs">資料の整理</a>
+</nav>
+<main>
+<h1>Anybots 全体プラン</h1>
+<p class="lead">2026-10-04 時点の正本となる計画。現行の実装・運用の資料と食い違う場合、<b>目指す姿</b>はこの文書を優先する。<b>現在の挙動</b>は各資料とコードを正とする。数値の実測値は2026-10-03〜04の本番記録から取っている。</p>
+
+<section id="tldr" class="tldr">
+<h3 style="margin-top:0">結論</h3>
+<ul>
+  <li><b>今の方式（Anybotsが中継し、新着の合図で起こし、AIが受信箱を取りに来る）は、一般向けAI同士の接続としては正しい土台。</b>ただし、すべての組み合わせに最適ではない。<b>最適なのは組み合わせ型</b>。人・許可・記録の管理（制御面）は1つにまとめ、運ぶ経路（データ面）は相手に合わせてMCP・A2A・待ち受け・ストリーミングから選ぶ。</li>
+  <li><b>A2A単体では成立しない。</b>ChatGPT・Grok Bot・Muse・Poke などの一般向けAIは、外から呼べるA2Aの受け口を持たず、MCPの「使う側」として動く。だから一般向けAIにはMCPで中継し、A2Aに対応したAIとはA2Aで話す。さらに、登録されたAIごとにA2Aの名刺（Agent Card）を代わりに公開すれば、一般向けAIをA2Aの世界から呼べるようにできる。</li>
+  <li><b>今の実装には遅くて無駄な部分が5つある。</b>
+    <ul>
+      <li>①通知workerが外部へHTTP送信している間も全体ロックを持ち続け、最大10秒ほど全員の書き込みを止める</li>
+      <li>②workerが1秒ごとにDBを問い合わせ続ける</li>
+      <li>③1回の受け渡しに、取りに来る呼び出しと終える呼び出しの2回が必要</li>
+      <li>④Museは5秒ごとの確認で、確認のたびにAIの1手を使う</li>
+      <li>⑤通知の上限がサービス全体で1つしかなく、1つの長いラリーで使い切ってしまう</li>
+    </ul>
+  </li>
+  <li><b>超高速ラリーの核は「返信して、そのまま次を待つ」1回の呼び出し。</b>両方のAIが動いている間は、1回の受け渡しの所要時間をAIが考える時間（数秒）だけにする。Anybots側の処理は50ms以下を目標にする。止まっているAIを起こす時間（実測15〜46秒）は相手の会社しだいなので、起こす回数そのものを減らす。</li>
+  <li><b>プロダクトの姿は「AIの電話帳＋許可＋記録」。</b>最初の利用場面は家族（ママのChatGPT ↔ 私のPoke）。運営が発行する閲覧鍵を貼る今の入口は捨てて、ログイン・招待・許可・タイムラインを持つ画面に作り直す。</li>
+</ul>
+</section>
+
+<h2 id="diagnosis">1. 現状の診断</h2>
+<h3>今の仕組み</h3>
+<pre>AI A ─MCP→ Anybots API ─(本文・処理・通知待ちを同じトランザクションで保存)→ PostgreSQL
+                                                         │ 1秒ごとに問い合わせ
+                                                  通知worker（全体ロックを持ったままHTTP送信）
+                                                         ↓
+AI B ← dots MCP Events / Grok ルーチンのWebhook（本文なしの合図）
+AI B ─MCP→ inbox_claim（受け取る）→ 考える → turn_finish（返信と完了）→ AI Aへ同じ流れ
+Muse：合図なし。実行中に5秒以上の間隔で inbox_claim を繰り返す</pre>
+
+<h3>実測した1回の受け渡しの所要時間（メッセージ保存から相手の完了まで）</h3>
+<table>
+<tr><th>経路</th><th>1回目</th><th>2回目</th><th>3回目</th><th>主な時間の使い道</th></tr>
+<tr><td>dots ↔ Grok（2026-10-03）</td><td>17秒</td><td>46秒</td><td>21秒</td><td>相手のAIの起動と推論。Anybots側はおおむね1秒以内（workerの問い合わせ待ちの最大1秒を含む）</td></tr>
+<tr><td>Muse ↔ Grok（2026-10-04）</td><td>26秒</td><td>15秒</td><td>24秒</td><td>Grokの起動と推論。Museは実行中に返信を確認していた</td></tr>
+</table>
+<p class="note">つまり、遅さの大部分は「止まっているAIを毎回起こしていること」。Anybots自体を速くしても、起こす回数を減らさないとラリーは速くならない。</p>
+
+<h3>実装上のボトルネックと無駄</h3>
+<table>
+<tr><th>#</th><th>箇所</th><th>何が起きるか</th><th>影響</th></tr>
+<tr><td>1</td><td><code>src/worker.ts</code> の <code>pg_advisory_lock(718401)</code> と <code>src/db.ts</code> の <code>lockRelay</code></td><td>全接続で共通の1本のロックを、workerが外部への送信中（最大10秒）も持ち続ける。中継側の書き込み（送信、受け取り、完了、停止）は全部このロックを待つ</td><td>ある通知先の応答が遅いだけで、関係ない全員のラリーが止まる。同時に進められる会話は実質1本</td></tr>
+<tr><td>2</td><td><code>src/worker-main.ts</code></td><td>空のときも1秒ごとにDBへ問い合わせる（1日約86,400回）。workerは別サービスで月$7</td><td>平均0.5秒の待ちが無駄に入る。DBと費用も無駄に使う</td></tr>
+<tr><td>3</td><td>ツールの形（<code>inbox_claim</code> → <code>turn_finish</code>）</td><td>1回の受け渡しに、受け取りと完了の2回の呼び出しが必要</td><td>AIの1手は数秒かかって利用料も使うので、往復ごとに数秒ずつ余計にかかる</td></tr>
+<tr><td>4</td><td>Museの確認（実行中に5秒以上の間隔）</td><td>空の確認もAIの1手を使う</td><td>待つほど利用料がかかる。Museが終了した後の自動再開も未検証</td></tr>
+<tr><td>5</td><td>通知の上限（全体で1日20回・月100回、本番は200・2000）</td><td>上限がサービス全体で1つだけ</td><td>1人の長いラリーで全員の通知が止まる。人間関係ごとの上限がない</td></tr>
+<tr><td>6</td><td>会話の上限（12回の受け渡し、24時間）</td><td>安全のための固定値</td><td>ラリーの利用場面では短すぎることがある。Linkごとの設定にする</td></tr>
+<tr><td>7</td><td>配置（Renderのシンガポール）</td><td>接続先（OpenAIの通知受け口、Cursorの <code>api2.cursor.sh</code>）の多くは米国にあると見込まれる</td><td>呼び出しのたびに太平洋を往復する（1回あたり約0.1〜0.2秒の見込み、未計測）</td></tr>
+</table>
+
+<h2 id="transport">2. 接続方式の比較</h2>
+<table>
+<tr><th>方式</th><th>強み</th><th>弱み</th><th>判定</th></tr>
+<tr><td><b>MCPでの中継</b>（現行）</td><td>ChatGPT・Grok・Muse・Claude・Pokeがみな「MCPを使う側」として対応している。今すぐ一般向けAIに届く唯一の共通の道</td><td>Anybotsが中継に入る。起こす仕組みは各社でバラバラ（MCP Events・Webhook・なし）</td><td><span class="tag dark">一般向けAIの主経路</span></td></tr>
+<tr><td><b>A2A v1.0</b>（Linux Foundation）</td><td>名刺（Agent Card）・署名による身元確認・仕事の状態管理・ストリーミング・通知の受け口が標準化済み。主要クラウドが対応している</td><td>相手がA2Aの受け口を持つ必要がある。一般向けAIは持っていない。人と人の関係や同意の仕組みは範囲外</td><td><span class="tag dark">業務用・自作AIとの経路、外部への公開</span></td></tr>
+<tr><td><b>直接通信（P2P）</b></td><td>中継の遅延と費用がない</td><td>一般向けAIは受け口を開けない。記録・停止・取り消しを保証できない</td><td><span class="tag">将来：A2A同士で、許可の証明だけAnybotsが出す</span></td></tr>
+<tr><td><b>Webhookで起こす</b>（dots・Grok）</td><td>止まっているAIを起こせる</td><td>起動に15〜46秒かかる。各社の非公開仕様に依存する</td><td><span class="tag dark">止まっている相手には必須</span></td></tr>
+<tr><td><b>短い間隔での確認</b>（Muse）</td><td>何の仕組みもなく動く</td><td>確認のたびにAIの1手。遅くて高い</td><td><span class="tag">次の「待ち受け」に置き換える</span></td></tr>
+<tr><td><b>待ち受け</b>（来るまで応答を保留する）</td><td>1回の呼び出しで「次のメッセージが来たら即座に返る」。確認の繰り返しが不要</td><td>各社のツール呼び出しの制限時間に縛られる（未検証）</td><td><span class="tag dark">動いているAI同士のラリーの主経路</span></td></tr>
+<tr><td><b>ストリーミング</b>（MCPの途中経過通知、A2AのSSE）</td><td>相手の途中経過を即座に流せる</td><td>対応状況が各社バラバラ</td><td><span class="tag">対応している相手だけで使う</span></td></tr>
+<tr><td><b>相手のチャットに直接送る</b>（SMSやiMessageでPokeへ）</td><td>APIがないAIにも届く</td><td>利用規約、なりすまし、記録の点で危うい</td><td><span class="tag">最後の手段。検証が先</span></td></tr>
+</table>
+<p class="note"><b>判定：組み合わせ型にする。</b>制御面（身元・Contact・Link・許可・記録・停止）は1つにまとめて、どの経路を使っても同じ判断と記録になるようにする。データ面は「起こす」「待ち受け」「A2A」「人へのお知らせ」の部品を相手ごとに選ぶ。</p>
+
+<h2 id="matrix">3. 組み合わせ別の最適経路</h2>
+<table>
+<tr><th>組み合わせ</th><th>例</th><th>止まっている相手への最初の1通</th><th>ラリー中</th><th>人が介入する場面</th></tr>
+<tr><td>起こせるAI ↔ 起こせるAI</td><td>dots ↔ Grok</td><td>MCP Events / Webhookで起こす</td><td>待ち受けと「返信して次を待つ」</td><td>許可の範囲外の依頼が来たときだけ</td></tr>
+<tr><td>起こせるAI ↔ 起こせないAI</td><td>Grok ↔ Muse、私のPoke ↔ ママの一般向けChatGPT</td><td>起こせない側は受信箱に保管し、<b>持ち主の人へお知らせ</b>（プッシュ通知・メール）。予約実行に対応していればそれも使う</td><td>起こせない側の実行中は待ち受け</td><td>「ママがChatGPTを開く」ことが起動のきっかけになる。正直に表示する</td></tr>
+<tr><td>起こせないAI ↔ 起こせないAI</td><td>Claudeのチャット ↔ 一般向けChatGPT</td><td>両方とも保管と人へのお知らせ</td><td>両方が開いている間だけ待ち受け</td><td>完全な自動化は各社が起こす仕組みを出すまで不可能</td></tr>
+<tr><td>一般向けAI ↔ A2AのAI</td><td>私のPoke ↔ お店の予約AI</td><td>AnybotsがA2Aで <code>SendMessage</code> を送る</td><td>短い仕事は<b>1回のツール呼び出しの中で答えまで待つ</b>（A2Aのストリーミング）。長い仕事は受信箱へ</td><td>支払いなど「実行」の段階は毎回確認</td></tr>
+<tr><td>A2AのAI ↔ A2AのAI</td><td>会社の業務AI同士</td><td colspan="2">A2Aで直接やりとりし、Anybotsは許可の証明（期限付き署名トークン）と記録の受け取りだけ。記録を必須にするなら中継に入る</td><td>方針しだい</td></tr>
+<tr><td>同じ会社のAI同士</td><td>dots ↔ dots</td><td colspan="2">同じ中継でよい。その会社のネイティブ機能が出たら比較する</td><td>同上</td></tr>
+</table>
+
+<h2 id="speed">4. 超高速ラリーの設計</h2>
+<h3>目標の時間</h3>
+<table>
+<tr><th>区間</th><th>今</th><th>目標</th><th>手段</th></tr>
+<tr><td>Anybots内（保存から相手に届くまで）</td><td>最大1秒強＋ロック待ち（最悪10秒）</td><td><b>50ms以下（中央値）</b></td><td>保存した直後にその場で配送。全体ロックは廃止</td></tr>
+<tr><td>動いているAI同士の1回の受け渡し</td><td>2回の呼び出し、Museは5秒の確認</td><td><b>AIが考える時間だけ</b>（1回の呼び出し）</td><td>「返信して次を待つ」</td></tr>
+<tr><td>止まっているAIを起こす</td><td>15〜46秒</td><td>相手の会社しだい（短縮は不可）</td><td>起こす回数を減らす：まとめて処理、構造化した依頼、ラリー中は起こしたまま</td></tr>
+</table>
+
+<h3>中心になるツールの形</h3>
+<pre>inbox_next({ wait_s?: 0..25 })
+  → { turn, message, conversation } | { idle: true }    // 来るまで保留して即座に返る。空振りはAIの1手を使わない
+
+turn_finish({ turnId, result, text?, expectsReply?, idempotencyKey, next?: { wait_s } })
+  → { messageId, next?: { turn, message } | { idle: true } }   // 返信と完了と、次の受け取りを1回で
+
+conversation_open({ ..., wait_reply_s? })                  // 送ってすぐ相手の返事を待つ（相手が動いているとき）</pre>
+<ul>
+  <li>受け取りと完了の2回を、完了と次の受け取りの1回にまとめる。ラリー中はどちらのAIも<b>1往復ごとに1回のツール呼び出し</b>で済む。</li>
+  <li>待ち受けの最大時間は、各社のツール呼び出しの制限時間より短く設定する（初期値は25秒）。制限時間は実際に計測してから決める。途中経過の通知で呼び出しを延長できる相手には延長する。</li>
+  <li>重複時の安全性（再送キー、期限、結果不明の扱い）は今の約束を保つ。</li>
+</ul>
+
+<h3>中継側の変更</h3>
+<table>
+<tr><th>変更</th><th>中身</th><th>得られるもの</th></tr>
+<tr><td>全体ロックの廃止</td><td>会話の行のロックと、接続（binding）ごとのロックに分ける。停止・取り消し・送信の順序は、会話の世代番号（epoch）と同じトランザクションの中での条件確認で守る。外部へのHTTP送信中にはDBのロックを持たない</td><td>会話どうしが並列に進む。遅い通知先が他の全員を止めない</td></tr>
+<tr><td>保存した直後の配送</td><td>コミットした後、APIのプロセス内でその場で配送する。複数台で動かすときは <code>LISTEN/NOTIFY</code> で知らせる。再試行と取りこぼしの回収だけ、30秒ごとの見回りで行う</td><td>1秒ごとの問い合わせとworkerサービス（月$7）が不要になる</td></tr>
+<tr><td>待ち受けの合図</td><td>待っている呼び出しには、プロセス内の待機と <code>LISTEN/NOTIFY</code> で即座に知らせる</td><td>Redisは不要。部品は増やさない</td></tr>
+<tr><td>本文を合図に入れる（選べる）</td><td>署名付きの合図に本文と1回限りの受け取りチケットを入れて、相手が <code>turn_finish</code> だけ呼べば済むようにする。<b>Linkごとに選べる</b>ようにし、セキュリティレビューと回帰試験を必須にする</td><td>止まっている相手でも呼び出しが1回減る</td></tr>
+<tr><td>構造化した依頼</td><td>予定調整などは「空き時間の候補」を型付きのデータで渡す。何往復も文章でやりとりしない</td><td>往復の回数そのものが減る。一番効く高速化</td></tr>
+<tr><td>上限をLinkごとに</td><td>通知の回数・受け渡しの回数・会話の期限を、Linkと持ち主ごとに設定する。全体の上限は費用の安全網として残す</td><td>1人の暴走が全員を止めない</td></tr>
+<tr><td>配置の見直し</td><td>接続先の地域を計測してから、米国の地域への移設を判断する</td><td>呼び出しのたびの往復時間が縮む</td></tr>
+</table>
+
+<h2 id="cost">5. お金と時間の無駄</h2>
+<table>
+<tr><th>項目</th><th>今</th><th>計画後</th></tr>
+<tr><td>Renderの基本料金</td><td>API $7 ＋ worker $7 ＋ DB $6 ＝ 月$20</td><td>API $7 ＋ DB $6 ＝ 月$13（workerを廃止）</td></tr>
+<tr><td>空のときのDB問い合わせ</td><td>1日約86,400回</td><td>見回りの1日約2,880回だけ</td></tr>
+<tr><td>Museの確認</td><td>5秒ごとにAIの1手</td><td>メッセージ1件につき1回の待ち受け</td></tr>
+<tr><td>1回の受け渡しの呼び出し</td><td>2回</td><td>1回</td></tr>
+<tr><td>一番大きい費用</td><td colspan="2">受け取る側のAIを起こすたびの推論の利用料（各利用者の契約の枠を使う）。起こす回数と往復の回数を減らすのが最も効く。Anybots自体の費用は小さい</td></tr>
+</table>
+<p class="note">Renderの通信料などは別料金で、月額の上限は保証されていない（<a href="render-deployment.md">運用記録</a>のとおり）。</p>
+
+<h2 id="product">6. プロダクトの姿</h2>
+<h3>立ち位置</h3>
+<p>誰もが自分のAIを持ち、AIが代わりに連絡・調整する社会では、「誰のAIに」「どこまで許して」「何が起きたか」を<b>会社をまたいで中立に</b>管理する層が必要になる。AI同士の通信方式はMCPとA2Aで標準化されていく。でも<b>人と人の信頼関係と許可</b>は、どのAI会社も中立にはやれない。Anybotsはそこを取る。AIアシスタントそのものとは競争しない。</p>
+
+<h3>中心になる考え方</h3>
+<table>
+<tr><th>単位</th><th>意味</th><th>今のテーブルとの関係</th></tr>
+<tr><td>Person</td><td>人。パスキー・Apple・Googleでログインする</td><td><code>owners</code> を発展させる。運営が発行する閲覧鍵（<code>directory_credentials</code>）は廃止</td></tr>
+<tr><td>Agent</td><td>その人のAI。提供元・表示名・アイコン・起こし方・最後に通信した時刻</td><td><code>bindings</code> に表示名と起こし方を足す</td></tr>
+<tr><td>Contact</td><td>人と人の関係（家族・友達・仕事）。両方の承認で成立する</td><td>新規</td></tr>
+<tr><td>Link</td><td>私のAgent ↔ 相手のAgent。Contactの下にぶら下がる</td><td><code>grants</code> を置き換える。運営の手作業ではなく、両者の同意で作る</td></tr>
+<tr><td>Policy</td><td>Linkごとの許可・上限・静かな時間帯・期限</td><td>新規</td></tr>
+<tr><td>Thread / Receipt</td><td>やりとりと、配達・既読・回答・承認の記録</td><td><code>conversations</code>・<code>messages</code>・<code>turns</code>・<code>outbox</code> を人が読める形で見せる</td></tr>
+</table>
+
+<h3>利用の流れ（ママのChatGPT ↔ 私のPoke）</h3>
+<ol>
+  <li><b>登録</b>：パスキーでログイン →「Add agent」→ Pokeを選ぶ → 接続の認証 → 接続テストが成功すると表示が「Connected」になる。</li>
+  <li><b>招待</b>：「Invite family」→ リンクかQRコードをLINEやSMSで送る。</li>
+  <li><b>ママの登録</b>：リンクからログイン →「Add ChatGPT」→ ChatGPTのアプリ一覧からAnybotsを追加する（<a href="#unverified">未検証</a>）。</li>
+  <li><b>許可の合意</b>：テンプレートを選ぶ（例：家族＝質問と予定調整は自動、実行と個人情報は毎回確認、22時〜7時は送らない）。両方が同じ条件を承認すると、Linkが有効になる。</li>
+  <li><b>使う</b>：Pokeに「ママに日曜空いてるか聞いて」→ 許可を確認して届ける → ママのAIが受け取る。止まっていればママへお知らせ → 返事 → Pokeが私に伝える。</li>
+  <li><b>管理する</b>：承認待ちの箱、Linkの一時停止と取り消し、タイムラインの確認と書き出し。</li>
+</ol>
+
+<h2 id="screens">7. 画面イメージ（英語で作り、後で日本語にも対応）</h2>
+<p>白・灰・黒の今の配色は保つ。ただしUUIDは「Details」の中に隠し、<b>アイコン・名前・持ち主・状態・相対時刻</b>を主役にする。どの行からも操作できるようにする。</p>
+
+<div class="frame"><div class="bar">Home</div>
+<div class="app"><div class="rail"><div class="on">Home</div><div>Agents</div><div>People</div><div>Activity</div><div>Settings</div></div>
+<div class="pane">
+  <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:16px">Needs you · 1</b><span class="btn">Invite someone</span></div>
+  <div class="row"><div class="av">M</div><div class="grow"><b>Mom's ChatGPT</b> wants your Poke to add “Dinner, Sun 18:00” to your calendar<div class="sub">Act · asks every time · 2 min ago</div></div><span class="btn ghost">Decline</span><span class="btn">Approve</span></div>
+  <b style="display:block;margin-top:18px">Recent</b>
+  <div class="row"><div class="av">P</div><div class="grow">Your Poke ↔ Mom's ChatGPT · “Free on Sunday?” → “Yes, after 5pm”<div class="sub">Answered in 4.1s · 3 turns</div></div><span class="sub">10:42</span></div>
+  <div class="row"><div class="av">G</div><div class="grow">Your Grok ↔ Ken's dots · Waiting for Ken's agent to wake<div class="sub">Delivered · not read yet</div></div><span class="sub">10:30</span></div>
+</div></div></div>
+
+<div class="grid2">
+<div class="frame"><div class="bar">Agents</div>
+<div class="pane">
+  <div class="row"><div class="av">P</div><div class="grow"><b>Poke</b><div class="sub"><span class="dot"></span>Connected · wakes instantly · 2 links</div></div><span class="btn ghost">Manage</span></div>
+  <div class="row"><div class="av">G</div><div class="grow"><b>Grok Bot</b><div class="sub"><span class="dot"></span>Connected · routine webhook · 1 link</div></div><span class="btn ghost">Manage</span></div>
+  <div class="row"><div class="av">C</div><div class="grow"><b>ChatGPT</b><div class="sub"><span class="dot off"></span>Reconnect needed · token expired</div></div><span class="btn">Reconnect</span></div>
+  <div style="margin-top:12px"><span class="btn">Add agent</span></div>
+</div></div>
+<div class="frame"><div class="bar">People</div>
+<div class="pane">
+  <div class="row"><div class="av">M</div><div class="grow"><b>Mom</b> · Family<div class="sub">Her ChatGPT ↔ your Poke · Active</div></div><span class="btn ghost">Open</span></div>
+  <div class="row"><div class="av">K</div><div class="grow"><b>Ken</b> · Friend<div class="sub">His dots ↔ your Grok · Paused by you</div></div><span class="btn ghost">Open</span></div>
+  <div class="row"><div class="av">A</div><div class="grow"><b>Aki</b> · Invited<div class="sub">Waiting for her to accept</div></div><span class="btn ghost">Resend</span></div>
+</div></div>
+</div>
+
+<div class="frame"><div class="bar">Link: Your Poke ↔ Mom's ChatGPT</div>
+<div class="pane">
+  <div class="link-graph"><div class="lg-box"><b>Your Poke</b><div class="sub">You · wakes instantly</div></div><div class="lg-mid">⇄</div><div class="lg-box"><b>Mom's ChatGPT</b><div class="sub">Mom · wakes when she opens ChatGPT</div></div></div>
+  <div class="grid2">
+    <div><b>Permissions</b>
+      <div class="perm" style="margin-top:8px">
+        <span>Ask (questions)</span><span class="seg"><span class="on">Auto</span><span>Ask me</span><span>Never</span></span>
+        <span>Coordinate (proposals)</span><span class="seg"><span class="on">Auto</span><span>Ask me</span><span>Never</span></span>
+        <span>Act (calendar, purchases)</span><span class="seg"><span>Auto</span><span class="on">Ask me</span><span>Never</span></span>
+        <span>Quiet hours</span><span class="sub">22:00–07:00</span>
+        <span>Limit</span><span class="sub">50 turns / day</span>
+      </div>
+      <div style="margin-top:12px"><span class="btn ghost">Pause</span> <span class="btn ghost">Remove link</span></div>
+    </div>
+    <div class="timeline"><b>Timeline</b>
+      <div>10:42:01 Your Poke asked “Free on Sunday?”</div>
+      <div>10:42:01 Delivered · Mom notified</div>
+      <div>10:44:37 Mom's ChatGPT read it</div>
+      <div>10:44:41 Answered “Yes, after 5pm”</div>
+      <div>10:44:42 Mom's ChatGPT requested Act: add event → waiting for you</div>
+    </div>
+  </div>
+</div></div>
+
+<h2 id="permissions">8. 許可と追跡</h2>
+<div class="grid2">
+<div class="card"><h4>許可</h4><p>段階は「質問・調整・実行」の3つで、それぞれ「自動・毎回確認・禁止」から選ぶ。初期値は関係ごとのテンプレートで決める。AIの画面の中での「はい」は許可とみなさない。人が自分の端末で承認した記録を残す（IETFのAI委任の草案と同じ考え方）。相手のAIの文章は命令ではなくデータとして扱う。</p></div>
+<div class="card"><h4>追跡</h4><p>状態は「送信 → 配達 → 既読 → 回答／承認待ち／拒否／期限切れ」。両方の持ち主が同じ記録を見られる。「相手のAIが終わったと言った」ことと「実際に終わった」ことは分けて表示する。後で改ざんを検出できる形（ハッシュの連鎖）にする。</p></div>
+<div class="card"><h4>停止</h4><p>Linkの一時停止・取り消し・Agentの切断は、どれもすぐ効く。すでに相手へ渡った本文や、相手が始めた操作は取り消せないことを画面で正直に示す。</p></div>
+<div class="card"><h4>身元</h4><p>Agentごとに、Anybotsが署名したA2Aの名刺（Agent Card）を発行する。どの人の、どのAIかを相手に証明する。将来は本人確認の段階（電話番号、身分証）を選べるようにする。</p></div>
+</div>
+
+<h2 id="strategy">9. 勝ち筋（ユニコーン・デカコーン）</h2>
+<table>
+<tr><th>参考</th><th>学ぶこと</th></tr>
+<tr><td>Instinct（2026年9月、評価額100億ドル）</td><td>「友達のAI同士で予定を合わせる」需要はある。ただし自社のAIだけで閉じている → Anybotsは会社をまたぐ</td></tr>
+<tr><td>Plaid・Twilio・Stripe Connect</td><td>バラバラな相手をつなぐ中立の層は、標準になれば巨大になる</td></tr>
+<tr><td>Calendly・Venmo・WhatsApp</td><td>使うたびに相手を招くので、自然に広がる</td></tr>
+<tr><td>Composio・Supermemory・Browser Use</td><td>接続を1行で管理する画面、ホスト型の認証リンク、何が起きたか全部たどれる記録</td></tr>
+<tr><td>BAND・Ando・doxx.net（2026年に資金調達）</td><td>AI同士の通信層には資金が集まっている。ただし多くは業務用か自社で閉じた環境 → 一般の人と人の関係が空いている</td></tr>
+</table>
+<ul>
+  <li><b>広がり方</b>：Linkは相手がいないと成立しないので、使うたびに招待が発生する。</li>
+  <li><b>お金の取り方</b>：
+    <ol>
+      <li>個人は無料</li>
+      <li>家族プラン（Agentの数、履歴の保存期間、見守り）</li>
+      <li>AI会社向けのAPI（身元の確認、配達、許可の確認で従量課金）</li>
+      <li>企業のAIに、個人のAIから連絡できる「AI用の電話番号」（最大の市場）</li>
+    </ol>
+  </li>
+  <li><b>守りの強み</b>：人と人の信頼関係のグラフ、許可の履歴、各社との接続の積み重ね、中立であること。</li>
+  <li><b>入口の候補</b>：家族の見守り（親に怪しい依頼が来たら子のAIにも知らせる）、友達の予定調整、<code>@handle</code> でAIに届く仕組み。</li>
+  <li><b>リスク</b>：
+    <ul>
+      <li>OpenAIやAppleが同じものを作る → 会社をまたげることで差をつける</li>
+      <li>一般向けChatGPTの制限</li>
+      <li>起こせないAIが多いこと</li>
+      <li>個人情報の法規制</li>
+      <li>AI同士のスパムや乗っ取り</li>
+    </ul>
+  </li>
+</ul>
+
+<h2 id="mvp">10. MVPと段階計画</h2>
+<h3>MVP「Family Link」</h3>
+<p>2人・2社のAI（PokeとChatGPT）で、3つの用途（予定調整・質問とリマインド・情報共有）が、許可と記録つきで動く状態。支払い、企業のAI、外部へのA2A公開、複数の端末は入れない。</p>
+<p><b>成功の指標</b>：</p>
+<ul>
+  <li>招待した人が実際に登録してLinkができる割合</li>
+  <li>1週間あたりの、違う会社のAI同士のやりとりの数</li>
+  <li>動いているAI同士の1回の受け渡しの中央値（目標：AIが考える時間＋50ms以下）</li>
+  <li>人が途中で何もせずに往復した割合</li>
+</ul>
+
+<h3>段階（時間の見積もりではなく、技術的な範囲で示す）</h3>
+<table>
+<tr><th>段階</th><th>範囲</th><th>主に変わる部品</th><th>完了の条件</th></tr>
+<tr><td>0. 検証</td><td><a href="#unverified">未検証の前提</a>の①〜⑤を、小さな試作で確かめる</td><td>試作のみ</td><td>結果を資料に記録し、この計画を更新</td></tr>
+<tr><td>1. 速いデータ面</td><td>全体ロックの廃止、保存した直後の配送、<code>LISTEN/NOTIFY</code>、<code>inbox_next</code> と <code>turn_finish</code> の「次を待つ」、Linkごとの上限、workerサービスの廃止</td><td><code>db.ts</code>・<code>relay.ts</code>・<code>worker*.ts</code>・<code>app.ts</code>・providers、Render構成</td><td>並列のラリーの負荷試験、停止と取り消しの競合試験、実アカウント（dots・Grok・Muse）での往復時間の計測</td></tr>
+<tr><td>2. アカウントと関係</td><td>ログイン（パスキー・メール）、Person・Contact・Link・Policy、招待リンク、両者の同意。運営が発行する閲覧鍵・CLI・手作業の通信許可を削除</td><td>DBスキーマの作り直し（データ移行なし）、directory系をすべて置き換え</td><td>別々の2人が、運営の手を借りずにLinkを作れる</td></tr>
+<tr><td>3. 許可と承認</td><td>3段階×3モード、人への承認依頼（プッシュ・メール）、静かな時間帯、相手の文章をデータとして扱う防御</td><td>relayの認可、通知</td><td>許可の範囲外の依頼が止まり、承認後に進む回帰試験</td></tr>
+<tr><td>4. 新しい画面</td><td>Home・Agents・People・Link・Activity</td><td><code>/directory</code> を置き換え</td><td>実際の利用者が、説明なしで招待から承認まで完了できる</td></tr>
+<tr><td>5. 接続先を広げる</td><td>Poke、一般向けChatGPT（公式アプリ）、Claude。A2Aの名刺の公開とA2Aでの送信</td><td>providers、A2Aの入口</td><td>各組み合わせで、人が途中で何もせずに往復することを実アカウントで確認</td></tr>
+</table>
+<p class="note">各段階で、資料の更新 → 失敗するテストの作成 → 最小実装 → 不要コードの削除、の順に進める。認証・認可・外部通信・資源制限に関わる段階（1〜3、5）では、<code>web-security-review</code> の手順で <a href="security.md">セキュリティ設計</a>と回帰試験を更新する。</p>
+
+<h2 id="unverified">11. 未検証の前提（検証するまで完成とは言わない）</h2>
+<table>
+<tr><th>#</th><th>前提</th><th>なぜ重要か</th><th>確かめ方</th></tr>
+<tr><td>①</td><td>一般向けChatGPT（Plus）から、書き込みのあるAnybotsのツールを使えるか</td><td>今は開発者モードに頼っている。書き込みのあるMCPはBusiness・Enterpriseに限られる（OpenAIのヘルプ、2026年時点）。公式アプリとしての申請が必要かもしれない</td><td>Apps SDKの申請の条件を調べ、Plusのアカウントで試す</td></tr>
+<tr><td>②</td><td>PokeがAnybotsを接続先として使えるか、外から起こせるか</td><td>MVPの片方の主役</td><td>Pokeの統合機能（Poke Kitchen・カスタム統合）とAPIを試す</td></tr>
+<tr><td>③</td><td>各社のツール呼び出しの制限時間と、途中経過の通知で延長できるか</td><td>待ち受けの最大時間を決める</td><td>dots・Grok・Muse・Claudeで、保留する試験用ツールを計測する</td></tr>
+<tr><td>④</td><td>止まっているMuse・Claudeを起こす手段（予約実行など）</td><td>起こせない組み合わせの体験を決める</td><td>公式機能を調べて実際に試す</td></tr>
+<tr><td>⑤</td><td>接続先の地域と往復時間</td><td>Renderの地域の判断</td><td>実際の呼び出し元のIPと所要時間を記録する</td></tr>
+<tr><td>⑥</td><td>本番DBを作り直した後の、dots・Grokの再OAuthと往復</td><td>作り直し前の成功は、今も動いている証拠にならない</td><td>再接続して往復を記録する</td></tr>
+</table>
+
+<h2 id="docs">12. 資料の整理（2026-10-04）</h2>
+<ul>
+  <li>削除：<code>TODOS.md</code>（この計画の段階表に置き換え）、<code>docs/connection-directory-cli.md</code>（CLIの配布は段階2で廃止）、<code>docs/connection-directory-ui.md</code>（<code>connection-directory.md</code> と重複していた。画面は段階4で作り直す）。</li>
+  <li>書き直し：<code>docs/architecture.md</code>（現行の構成とボトルネックだけに絞り、目指す姿はこの文書へ）。</li>
+  <li>残す：現行の挙動と運用の根拠（<code>providers.md</code>・<code>oauth.md</code>・<code>security.md</code>・<code>render-deployment.md</code>・<code>first-connection.md</code>・<code>muse-connection.md</code>・<code>callback-diagnostics.md</code>・<code>onboarding-readiness.md</code>・<code>remote-admin.md</code>・<code>connection-directory.md</code>）。実装を変える段階で一緒に更新する。</li>
+</ul>
+</main>
+</div>
+</body>
+</html>

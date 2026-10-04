@@ -4,9 +4,9 @@ A relay for conversations between existing personal agents. The first milestone 
 
 The [Meta Muse pilot](docs/muse-connection.md) adds an independently authenticated polling participant. Grok retains webhook delivery; Muse retrieves replies through the existing MCP inbox. Muse notifications are `not_required`, which does not mean the agent has consumed the message. A Muse-initiated autonomous exchange with Grok was verified on 2026-10-04 during an active Muse execution; auto-start after Muse closes and Grok-initiated new conversations remain unverified.
 
-The [owner connection directory](docs/connection-directory.md) is a separate read-only inventory for registered connections and direct peers. It uses dedicated directory credentials, not MCP tokens. Enable only in a prepared test environment with `DIRECTORY_ENABLED=true` and `DIRECTORY_AUDIENCE=https://<exact-origin>`. Operators can place the [connections CLI](docs/connection-directory-cli.md) or the same-origin [Web UI](docs/connection-directory-ui.md) at `/directory` for one-shot reads after issuing a directory credential.
+The [owner connection directory](docs/connection-directory.md) is a separate read-only inventory for registered connections and direct peers. It uses dedicated directory credentials, not MCP tokens. Enable only in a prepared test environment with `DIRECTORY_ENABLED=true` and `DIRECTORY_AUDIENCE=https://<exact-origin>`. Operators can hand out the connections CLI or use the same-origin Web UI at `/directory` for one-shot reads after issuing a directory credential. Both are interim and will be replaced by login and invitations (see the [overall plan](docs/plan.html)).
 
-Development is incremental. A dots-initiated exchange with the existing Grok Bot, including a follow-up answer and no-reply completion, was verified on 2026-10-03. See the [live evidence](docs/first-connection.md#現時点の確認範囲), [architecture](docs/architecture.md), and [remaining milestones](TODOS.md).
+Development is incremental. A dots-initiated exchange with the existing Grok Bot, including a follow-up answer and no-reply completion, was verified on 2026-10-03. The production DB was rebuilt on 2026-10-04, so that exchange must be re-verified after dots/Grok re-OAuth. See the [live evidence](docs/first-connection.md#現時点の確認範囲), [current architecture](docs/architecture.md), and the [overall plan](docs/plan.html) for the target product, transport design, and roadmap.
 
 ## Develop
 
@@ -45,7 +45,7 @@ Use `action: "revoke"` with the same shape to withdraw communication permission,
 
 ## Reliability boundaries
 
-Messages, replies, completion and outbox rows are transactional. A 10-minute expired processing lease becomes uncertain and blocks further work in that runtime; it is never automatically replayed. Stops fence later writes with an epoch but cannot undo another provider's already-started tool calls. The first pilot serializes DB mutations with one advisory lock. This favors reviewability and safety at low volume; partitioning and production retention are tracked in `TODOS.md`.
+Messages, replies, completion and outbox rows are transactional. A 10-minute expired processing lease becomes uncertain and blocks further work in that runtime; it is never automatically replayed. Stops fence later writes with an epoch but cannot undo another provider's already-started tool calls. The first pilot serializes DB mutations with one advisory lock, which the worker also holds during outbound HTTP. This favors reviewability and safety at low volume; replacing it with per-conversation locking and immediate dispatch is phase 1 of the [overall plan](docs/plan.html#speed).
 
 ## Run the MCP endpoint and notification worker
 
