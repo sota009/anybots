@@ -30,7 +30,7 @@
   - `Content-Type: application/json` であること
   - どちらかが欠けたら403にする（CSRF対策。SameSite=Laxと二重にする）
 - **レスポンスヘッダー**：
-  - すべて：`Cache-Control: no-store`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`
+  - すべて：`Cache-Control: no-store`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Cross-Origin-Opener-Policy: same-origin`、`Cross-Origin-Resource-Policy: same-origin`。HTTPSでは `Strict-Transport-Security: max-age=31536000`
   - HTML：`Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
 
 ## データモデル
@@ -48,7 +48,7 @@ messages（intent と approval を持つ）
 ### Link（`grants`）
 
 - **状態**：`proposed` → `active` → `revoked`。`active` 列は `status='active'` から生成する読み取り専用列。
-- **作れる条件**：自分のAgentと、Contactの相手のAgentの組だけ。提案した側の反対側の持ち主が承認すると有効になる。
+- **作れる条件**：自分のAgentと、Contactの相手のAgentの組、または自分のAgent同士。相手の持ち主が承認すると有効になる。自分のAgent同士はその場で有効になる。既に提案中・有効な組は `already_linked` を返す。
 - **方針は受け取る側ごと**（`policy_a` は `binding_a` が受け取るメッセージに効く）：
   - 各持ち主は、自分のAgentが受け取る範囲だけをいつでも変えられる。相手の再同意はいらない。
   - 方針の中身は `ask`・`coordinate`・`act` の3種類それぞれに `auto|approve|never`、加えて `daily_limit`（1〜1000）。
@@ -57,7 +57,7 @@ messages（intent と approval を持つ）
 
 ### メッセージの intent と承認
 
-- 送る側のAIが `intent`（`ask|coordinate|act`、省略時は `ask`）を付ける。受け取る側の方針で次のように扱う：
+- 送る側のAIが `conversation_open` と `turn_finish` の返信（`replied`）に `intent`（`ask|coordinate|act`、省略時は `ask`）を付ける。受け取る側の方針で次のように扱う：
   - `never`：保存せずに `forbidden_by_policy` で拒否する
   - `approve`：`approval='pending'` で保存する。受信箱にも通知にも出さない。受け取る側の持ち主がWebで承認すると配達し、拒否すると会話を止める
   - `auto`：そのまま配達する
@@ -111,7 +111,7 @@ messages（intent と approval を持つ）
   - ログイン後の書き込み：人ごとに毎分60回
   - 招待の発行：人ごとに1日20件
   - IPで拒否した要求は全体の枠を消費しない（書籍164頁のロックアウト対策）
-- 転送元IPのヘッダーは、Renderのプロキシを1段だけ信頼する（`TRUST_PROXY_HOPS=1`）。
+- 転送元IPは `X-Forwarded-For` の右から `TRUST_PROXY_HOPS` 番目（0〜3、既定0＝接続元そのもの）を使う。Renderでは1段を想定するが、実際の段数は未検証。OAuthの試行制限も同じ値を使う。
 
 ## 画面
 

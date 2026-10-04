@@ -341,6 +341,12 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <tr><td>4. 新しい画面</td><td>Home・Agents・People・Link・Activity</td><td><code>/directory</code> を置き換え</td><td>実際の利用者が、説明なしで招待から承認まで完了できる</td></tr>
 <tr><td>5. 接続先を広げる</td><td>Poke、一般向けChatGPT（公式アプリ）、Claude。A2Aの名刺の公開とA2Aでの送信</td><td>providers、A2Aの入口</td><td>各組み合わせで、人が途中で何もせずに往復することを実アカウントで確認</td></tr>
 </table>
+<h3>進捗（2026-10-04、v0.2.0）</h3>
+<ul>
+  <li><b>実装と自動試験まで済み</b>：段階1（ロック解放、<code>LISTEN/NOTIFY</code>、<code>wait_s</code>・<code>next</code>、Linkごとの1日の上限、worker廃止）、段階2（パスキーのログイン、招待、Contact・Link・両者の同意、directory・CLI・手作業の通信許可の削除）、段階3（受け取る側ごとの3段階×3モード、Webでの承認）、段階4（Home・Agents・People・Linkの画面。Activityは各Linkのタイムラインとして実装）。仕様は <a href="web-app.md">Web app</a>。</li>
+  <li><b>見送り</b>：メールでのログイン、プッシュ・メールによる承認依頼、静かな時間帯。承認はWebのHomeで行う。</li>
+  <li><b>未検証</b>：本番での動作、実アカウント（dots・Grok・Muse）での往復時間の計測、実機のパスキー、利用者が説明なしで招待から承認まで完了できるか。</li>
+</ul>
 <p class="note">各段階で、資料の更新 → 失敗するテストの作成 → 最小実装 → 不要コードの削除、の順に進める。認証・認可・外部通信・資源制限に関わる段階（1〜3、5）では、<code>web-security-review</code> の手順で <a href="security.md">セキュリティ設計</a>と回帰試験を更新する。</p>
 
 <h2 id="unverified">11. 未検証の前提（検証するまで完成とは言わない）</h2>
@@ -358,7 +364,8 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <ul>
   <li>削除：<code>TODOS.md</code>（この計画の段階表に置き換え）、<code>docs/connection-directory-cli.md</code>（CLIの配布は段階2で廃止）、<code>docs/connection-directory-ui.md</code>（<code>connection-directory.md</code> と重複していた。画面は段階4で作り直す）。</li>
   <li>書き直し：<code>docs/architecture.md</code>（現行の構成とボトルネックだけに絞り、目指す姿はこの文書へ）。</li>
-  <li>残す：現行の挙動と運用の根拠（<code>providers.md</code>・<code>oauth.md</code>・<code>security.md</code>・<code>render-deployment.md</code>・<code>first-connection.md</code>・<code>muse-connection.md</code>・<code>callback-diagnostics.md</code>・<code>onboarding-readiness.md</code>・<code>remote-admin.md</code>・<code>connection-directory.md</code>）。実装を変える段階で一緒に更新する。</li>
+  <li>残す：現行の挙動と運用の根拠（<code>providers.md</code>・<code>oauth.md</code>・<code>security.md</code>・<code>render-deployment.md</code>・<code>first-connection.md</code>・<code>muse-connection.md</code>・<code>callback-diagnostics.md</code>・<code>onboarding-readiness.md</code>・<code>remote-admin.md</code>）。実装を変える段階で一緒に更新する。</li>
+  <li>v0.2.0で削除：<code>docs/connection-directory.md</code>（Webアプリに置き換え）。新設：<code>docs/web-app.md</code>。</li>
 </ul>
 </main>
 </div>

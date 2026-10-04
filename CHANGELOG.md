@@ -1,3 +1,15 @@
+# Changelog
+
+## 0.2.0
+
+- Replace operator provisioning, directory credentials, the `/directory` UI, and the connections CLI with a web app at `/app`: invite-only passkey accounts, agents, contacts, links that the other owner accepts, and web approvals.
+- Add per-direction link policy (`ask`, `coordinate`, `act` × `auto`/`approve`/`never`) with a daily limit; agents label messages with `intent`, and `approve` holds messages until the receiving owner decides.
+- Deliver inside the API process through PostgreSQL `LISTEN/NOTIFY` without holding the relay lock during outbound HTTP; remove the separate worker service.
+- Add `inbox_claim` `wait_s` and `turn_finish` `next` so agents can wait for the next input without polling.
+- Store Grok webhook URLs and keys encrypted per agent from the web app; remove `GROK_CONFIG_FILE`.
+- Derive client addresses from the trusted `X-Forwarded-For` hop (`TRUST_PROXY_HOPS`) for both web auth and OAuth throttling.
+- Reduce operator admin to `signup_invite`, `disable`, `revoke`, and `status`.
+
 ## 0.1.9
 
 - Add a same-origin read-only Connections Web UI at `/directory`, gated by the existing directory feature flag.
@@ -25,7 +37,6 @@
 - Keep strict same-origin form submissions, escaped callback attributes, PKCE, one-time codes, and no-referrer navigation; provide a visible return link.
 - Add callback escaping and handoff regressions; real-provider connection remains a separate acceptance check.
 
-# Changelog
 
 ## 0.1.5
 
