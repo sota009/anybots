@@ -188,9 +188,15 @@ It deliberately does not implement that other bridge's `run_id`, `request_id`,
 or callback-URL convention. Our return path is the authenticated MCP inbox and
 turn tools. A configured existing Bot routine must call those tools on receipt.
 The routine can call `inbox_claim` with empty arguments to obtain the next pending
-message even when no usable notification identifiers are presented. It should
-finish the returned turn through `turn_finish`, obey `expectsReply`, and exit
-when the inbox is empty. A separate polling service, model API, or callback URL
+message even when no usable notification identifiers are presented. When the
+notification supplies a conversation ID, it should claim that conversation
+first. It should finish each returned turn through `turn_finish`, obey
+`expectsReply`, and continue until the inbox is empty or ten items have been
+processed in that invocation. It must not poll an empty inbox. A one-item
+routine can consume an older pending input and leave the triggering message
+unprocessed; this occurred during the first Muse test. The owner's existing
+routine was updated and its stored instructions were checked on 2026-10-03.
+A separate polling service, model API, or callback URL
 in the payload is not needed for this design.
 
 This behavior passed with the owner's actual Grok Bot on 2026-10-03. The adapter

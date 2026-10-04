@@ -22,7 +22,7 @@ Tests create isolated schemas and remove only their own schemas. Set `TEST_DATAB
 
 ## Operator provisioning
 
-The initial relay uses operator-provisioned, consented connections. This is a development path, not completed product onboarding. The [OAuth pilot](docs/oauth.md) provides a one-time browser pairing flow; real personal Grok and dots onboarding remains to be verified.
+The initial relay uses operator-provisioned, consented connections. This is a development path, not completed product onboarding. The [OAuth pilot](docs/oauth.md) provides a one-time browser pairing flow; the owner's real personal Grok and dots connections and automatic exchange have been [verified](docs/first-connection.md#現時点の確認範囲). A separate [Meta Muse connector](docs/muse-connection.md) has also completed an automatic exchange with Grok during an active Muse execution.
 
 ```sh
 echo '{"action":"provision","ownerId":"owner-a","runtimeScope":"dots-owner-a","provider":"dots"}' | npm run admin
