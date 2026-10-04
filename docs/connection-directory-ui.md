@@ -1,40 +1,58 @@
-# 接続一覧Web UI
+# Connections Web UI
 
-2026年10月4日。社内限定試験向けの読み取り専用画面。
+2026-10-04. Read-only screen for limited internal trials.
 
-## 目的
+## Purpose
 
-運営が配置した一覧専用資格情報を使い、利用者がブラウザで自分の接続と直結相手を確認する。CLIと同じAPI・同じDTO・同じエラー意味を使う。会話本文は扱わず、AIも起動しない。
+Operators hand out directory-only credentials. Users open the same-origin page, load their connections and direct contacts, and match connection UUIDs against their registration notes. Same API, DTO, and error codes as the CLI. No message bodies. No AI calls.
 
-## 公開条件
+## Availability
 
-- `DIRECTORY_ENABLED=true` かつ `DIRECTORY_AUDIENCE` 設定済みのときだけ `/directory` を登録する
-- 同一オリジンのみ。CORSは付けない
-- 未設定環境ではルート自体が存在しない（404）
+- Register `/directory` only when `DIRECTORY_ENABLED=true` and `DIRECTORY_AUDIENCE` is set
+- Same origin only. No CORS
+- When disabled, the route is absent (404)
 
-## 利用手順
+## Flow
 
-1. 運営が所有者へ一覧専用秘密を手渡し、試験用HTTPSオリジンを案内する
-2. 利用者が `/directory` を開く
-3. 秘密を入力して「一覧を表示」する（`sessionStorage` に保存。永続Cookieは使わない）
-4. 表示された接続UUIDを登録控えと照合する
-5. 終わったら「この端末の閲覧鍵を消す」で sessionStorage を消去する
+1. Operators give the owner a directory secret and the HTTPS origin
+2. The user opens `/directory`
+3. They enter the secret and choose **Show connections** (`sessionStorage` only; no persistent cookie)
+4. They match displayed connection UUIDs to registration notes
+5. **Clear browsing key** removes the secret from `sessionStorage`
 
-## 画面
+Optional: `?connection_id=<uuid>` scopes to one owned connection.
 
-1. **入場**: ブランド「Anybots」を主信号にし、短い説明と秘密入力、1つの実行ボタンだけを置く
-2. **一覧**: 左にナビゲーション、右に取得時刻・完全性・接続行。各接続の直結相手を縦に並べる
-3. **失敗**: CLIと同じ固定コードに対応する短い案内。成功時の部分描画を残さない
+## Screens
 
-任意で `?connection_id=<uuid>` により単一接続へ絞り込む。
+1. **Unlock**: Brand **Anybots** as the hero signal, one short English lead, secret field, one primary action
+2. **List**: Left rail + main panel. Fetch time, completeness, connection rows with contacts stacked under each
+3. **Failure**: Short English guidance mapped to the same fixed API codes. No partial success paint
 
-## セキュリティ
+Primary UI language is **English**. Additional locales come later; do not mix Japanese into the shipped strings until i18n exists.
 
-- `Authorization: Bearer` だけをAPIへ送る。秘密をURLやクエリに載せない
-- 応答の未知フィールドを描画しない。許可したラベルだけをDOMへ出す
-- CSP・`Cache-Control: no-store`・`Referrer-Policy: no-referrer`・`X-Content-Type-Options: nosniff`
-- サーバーはUI閲覧の監査ログに秘密や応答本文を残さない
+## Security
 
-## デザイン根拠
+- Send `Authorization: Bearer` only. Never put the secret in the URL or query
+- Render only allowlisted labels. Ignore unknown response fields
+- CSP, `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`
+- Server audit logs for UI views must not record secrets or response bodies
 
-ChatGPTの設定的な静けさ（左レール、hairline、余白リズム）、Manusのコネクタ一覧の見せ方を参照し、Claudeに多いクリーム＋テラコッタ基調は採らない。詳細は[connection-directory.md](connection-directory.md#見た目の根拠2026-10-04調査)。
+## Visual direction (imitate ChatGPT + Manus)
+
+Surveyed 2026-10-04:
+
+- **ChatGPT** (Refero Styles; OpenAI Appearance): graphite-on-paper, left rail, hairline borders, achromatic hierarchy, neutral Black accent for primary controls in light mode
+- **Manus** (manus.im/brand; Connectors help): white / gray `#F8F8F8` / black `#34322D`, DM Sans, connector-list rows as the product of the screen
+
+Ship:
+
+| Token | Value | Role |
+| --- | --- | --- |
+| Canvas | `#FFFFFF` / `#F8F8F8` | Main surface / rail |
+| Ink | `#0D0D0D` / `#34322D` | Primary text (ChatGPT graphite + Manus black) |
+| Muted | `#5D5D5D` | Secondary text |
+| Line | `rgba(0,0,0,0.08)` | Hairline only; no heavy shadows |
+| Primary CTA | `#0D0D0D` on `#FFFFFF` text | Black button — not green, teal, or blue |
+| Font | DM Sans | UI and brand wordmark |
+
+Do not ship teal/green buttons, cool-mist teal washes, Fraunces/Outfit pairing, pill status clusters, or cream+terracotta. Registration state uses weight and muted fill, not green/red chips. Details: [connection-directory.md](connection-directory.md#見た目の根拠2026-10-04調査).

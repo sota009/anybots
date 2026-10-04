@@ -115,15 +115,15 @@ UIは既存の `GET /v1/me/connections` を1回呼び、同じDTOとエラーコ
 
 ### 見た目の根拠（2026-10-04調査）
 
-一次資料とデザイン分解を Exa / Composio Search で確認した。
+一次資料を確認した（OpenAI Help / Refero ChatGPT Styles、Manus Brand Assets、Manus Connectors ヘルプ）。
 
 | 参照 | 取り入れる | 採らない |
 | --- | --- | --- |
-| ChatGPT（Refero Styles, 2026） | 左レール＋主面、無彩色に近い階層、hairline境界、余白リズム、設定画面の静けさ | システムフォント依存、完全グレースケール（ブランド識別が弱い） |
-| Claude（Anthropic DESIGN.md / Refero, 2026） | 読み物としての余白とタイポ階層 | 羊皮紙クリーム＋テラコッタ基調（AI製品UIの定型クラスタ） |
-| Manus（AI UX Playground composer teardown, 2026-06） | コネクタ／接続を主役にした一覧、結果ラベル付きの発見しやすい行 | チャット作曲バーやクレジット表示（本機能の範囲外） |
+| ChatGPT（Refero Styles + Appearance, 2026） | 左レール＋主面、無彩色階層、hairline（`rgba(0,0,0,0.05)`級）、余白リズム、ライト面の中立アクセント（Black CTA） | 緑・青などの色付き主ボタン、色で状態を伝えるバッジ、システムフォントだけへの依存 |
+| Manus（brand.manus.im, 2026） | 白 `#FFFFFF` / 灰 `#F8F8F8` / 黒 `#34322D`、DM Sans、接続一覧を主役にした行レイアウト | チャット作曲バー、クレジット表示、色付きブランドグラデ |
+| Claude（Anthropic DESIGN.md / Refero） | （参照のみ）読み物余白 | 羊皮紙クリーム＋テラコッタ基調（AI製品UIの定型クラスタ） |
 
-Anybots固有の方向: cool mistキャンバスに深いティールアクセント、表示は Fraunces、UIは Outfit。ブランド名を第一画面の主信号にし、接続行だけを操作対象にする。カード群や統計ストリップは置かない。
+Anybots固有の方向: ChatGPT設定画面の静けさに、Manusの白灰黒パレットと接続行の見せ方を合わせる。主ボタンは黒（白文字）。緑・ティール・紫のアクセントは使わない。画面文言の第一言語は英語（後日 i18n）。ブランド名を入場画面の主信号にし、接続行だけを操作対象にする。カード群や統計ストリップは置かない。
 
 ## 実装単位
 
