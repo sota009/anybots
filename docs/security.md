@@ -93,7 +93,8 @@ dotsの購読先ホストが未許可の場合、認証済みの要求元へホ�
 
 ### 検証の結果（2026-10-04）
 
-- `npm run check`：型検査、25ファイル215テスト、ビルドが成功。`npm audit --omit=dev --audit-level=high` の検出は0件（追加した依存は `@simplewebauthn/server` 14.0.3のみ）
+- migration 009の初版は、旧 `grants.active=false`（取り消し済み）を `status='active'` に戻していた。旧スキーマに取り消し済みの組を入れて009を適用する試験で再現し、旧値から `status` を設定してから列を消すように直した（`test/migration-009.test.ts`）。列の既定値は `proposed` にし、明示しない挿入が有効な許可にならないようにした
+- `npm run check`：型検査、26ファイル216テスト、ビルドが成功。`npm audit --omit=dev --audit-level=high` の検出は0件（追加した依存は `@simplewebauthn/server` 14.0.3のみ）
 - パスキーは、試験用の模擬認証器（ES256、ユーザー確認フラグ付き）で、登録・ログイン・別originや別チャレンジの拒否・ユーザー確認なしの拒否を確認した（`test/accounts.test.ts`、`test/webauthn-fake.ts`）
 - ローカルのヘッドレスChromeと仮想認証器で、招待からの登録、Agentの追加、Contact招待、Linkの承認、`act` の承認待ち、承認後の配達、CSPヘッダーを画面操作で確認した。MCPの待ち受け（`wait_s`）は返信のコミットから26ミリ秒で戻った
 - **未検証**：Render上の実際の `X-Forwarded-For` の段数（Cloudflareを含むか）、実機のパスキー（iCloudキーチェーン、Androidなど）、本番での動作、実際のdots・Grok・Muse・ChatGPTによる新しい方式での往復
