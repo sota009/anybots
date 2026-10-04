@@ -167,13 +167,12 @@ Muse：合図なし。実行中に5秒以上の間隔で inbox_claim を繰り�
 </table>
 
 <h3>中心になるツールの形</h3>
-<pre>inbox_next({ wait_s?: 0..25 })
-  → { turn, message, conversation } | { idle: true }    // 来るまで保留して即座に返る。空振りはAIの1手を使わない
+<pre>inbox_claim({ conversation_id?, wait_s?: 0..25 })
+  → { turnId, conversationId, message, ... } | null     // 来るまで保留して即座に返る。空振りはAIの1手を使わない
 
-turn_finish({ turnId, result, text?, expectsReply?, idempotencyKey, next?: { wait_s } })
-  → { messageId, next?: { turn, message } | { idle: true } }   // 返信と完了と、次の受け取りを1回で
-
-conversation_open({ ..., wait_reply_s? })                  // 送ってすぐ相手の返事を待つ（相手が動いているとき）</pre>
+turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { wait_s? } })
+  → { turnId, result, messageId?, next?: 受け取り | null }   // 返信と完了と、次の受け取りを1回で</pre>
+<p>実装では既存の <code>inbox_claim</code> に <code>wait_s</code> を足した。Grokのルーチンなど、今の指示文をそのまま使えるようにするため。送信と同時に返事を待つ <code>conversation_open</code> の待ち受けは、<code>inbox_claim</code> の待ち受けで代わりになるため作らない。</p>
 <ul>
   <li>受け取りと完了の2回を、完了と次の受け取りの1回にまとめる。ラリー中はどちらのAIも<b>1往復ごとに1回のツール呼び出し</b>で済む。</li>
   <li>待ち受けの最大時間は、各社のツール呼び出しの制限時間より短く設定する（初期値は25秒）。制限時間は実際に計測してから決める。途中経過の通知で呼び出しを延長できる相手には延長する。</li>
@@ -183,7 +182,7 @@ conversation_open({ ..., wait_reply_s? })                  // 送ってすぐ相
 <h3>中継側の変更</h3>
 <table>
 <tr><th>変更</th><th>中身</th><th>得られるもの</th></tr>
-<tr><td>全体ロックの廃止</td><td>会話の行のロックと、接続（binding）ごとのロックに分ける。停止・取り消し・送信の順序は、会話の世代番号（epoch）と同じトランザクションの中での条件確認で守る。外部へのHTTP送信中にはDBのロックを持たない</td><td>会話どうしが並列に進む。遅い通知先が他の全員を止めない</td></tr>
+<tr><td>外部送信中のロック解放</td><td>全体ロックは短いトランザクションの中だけで使い、外部へのHTTP送信中には持たない。送信は「ロックの中で予約して確定 → ロックなしで送る → 結果を記録」の2段階にする。会話ごとのロックへの分割は、利用者が増えて計測で必要になってから行う</td><td>遅い通知先が他の全員を止めない。ロックを持つ時間は1回あたり数ミリ秒</td></tr>
 <tr><td>保存した直後の配送</td><td>コミットした後、APIのプロセス内でその場で配送する。複数台で動かすときは <code>LISTEN/NOTIFY</code> で知らせる。再試行と取りこぼしの回収だけ、30秒ごとの見回りで行う</td><td>1秒ごとの問い合わせとworkerサービス（月$7）が不要になる</td></tr>
 <tr><td>待ち受けの合図</td><td>待っている呼び出しには、プロセス内の待機と <code>LISTEN/NOTIFY</code> で即座に知らせる</td><td>Redisは不要。部品は増やさない</td></tr>
 <tr><td>本文を合図に入れる（選べる）</td><td>署名付きの合図に本文と1回限りの受け取りチケットを入れて、相手が <code>turn_finish</code> だけ呼べば済むようにする。<b>Linkごとに選べる</b>ようにし、セキュリティレビューと回帰試験を必須にする</td><td>止まっている相手でも呼び出しが1回減る</td></tr>
@@ -336,7 +335,7 @@ conversation_open({ ..., wait_reply_s? })                  // 送ってすぐ相
 <table>
 <tr><th>段階</th><th>範囲</th><th>主に変わる部品</th><th>完了の条件</th></tr>
 <tr><td>0. 検証</td><td><a href="#unverified">未検証の前提</a>の①〜⑤を、小さな試作で確かめる</td><td>試作のみ</td><td>結果を資料に記録し、この計画を更新</td></tr>
-<tr><td>1. 速いデータ面</td><td>全体ロックの廃止、保存した直後の配送、<code>LISTEN/NOTIFY</code>、<code>inbox_next</code> と <code>turn_finish</code> の「次を待つ」、Linkごとの上限、workerサービスの廃止</td><td><code>db.ts</code>・<code>relay.ts</code>・<code>worker*.ts</code>・<code>app.ts</code>・providers、Render構成</td><td>並列のラリーの負荷試験、停止と取り消しの競合試験、実アカウント（dots・Grok・Muse）での往復時間の計測</td></tr>
+<tr><td>1. 速いデータ面</td><td>外部送信中のロック解放、保存した直後の配送、<code>LISTEN/NOTIFY</code>、<code>inbox_claim</code>（<code>wait_s</code>）と <code>turn_finish</code> の「次を待つ」、Linkごとの上限、workerサービスの廃止</td><td><code>db.ts</code>・<code>relay.ts</code>・<code>worker*.ts</code>・<code>app.ts</code>・providers、Render構成</td><td>並列のラリーの負荷試験、停止と取り消しの競合試験、実アカウント（dots・Grok・Muse）での往復時間の計測</td></tr>
 <tr><td>2. アカウントと関係</td><td>ログイン（パスキー・メール）、Person・Contact・Link・Policy、招待リンク、両者の同意。運営が発行する閲覧鍵・CLI・手作業の通信許可を削除</td><td>DBスキーマの作り直し（データ移行なし）、directory系をすべて置き換え</td><td>別々の2人が、運営の手を借りずにLinkを作れる</td></tr>
 <tr><td>3. 許可と承認</td><td>3段階×3モード、人への承認依頼（プッシュ・メール）、静かな時間帯、相手の文章をデータとして扱う防御</td><td>relayの認可、通知</td><td>許可の範囲外の依頼が止まり、承認後に進む回帰試験</td></tr>
 <tr><td>4. 新しい画面</td><td>Home・Agents・People・Link・Activity</td><td><code>/directory</code> を置き換え</td><td>実際の利用者が、説明なしで招待から承認まで完了できる</td></tr>
