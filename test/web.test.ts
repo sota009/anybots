@@ -64,6 +64,14 @@ it('serves a static landing page without scripts, forms, or external resources',
   expect(css.body).not.toMatch(/@import|url\(/);
 });
 
+it('presents the product as knotcat on every page and asset', async () => {
+  for (const url of ['/', '/guide', '/app', '/app/app.js']) {
+    const page = await app.inject({ url, headers: { host } });
+    expect(page.body).toContain('knotcat');
+    expect(page.body).not.toMatch(/anybots/i);
+  }
+});
+
 it('serves a static guide whose only absolute URL is this relay\'s MCP endpoint', async () => {
   const landing = await app.inject({ url: '/', headers: { host } });
   expect(landing.body).toContain('href="/guide"');
@@ -84,7 +92,7 @@ it('registers over HTTP with a host-only, secure, HttpOnly, SameSite=Lax session
   const { verified, cookie } = await signup();
   expect(verified.statusCode).toBe(200);
   const header = String(verified.headers['set-cookie']);
-  expect(header).toMatch(/^__Host-anybots_session=[A-Za-z0-9_-]{43}; Path=\/; HttpOnly; SameSite=Lax; Max-Age=1209600; Secure$/);
+  expect(header).toMatch(/^__Host-knotcat_session=[A-Za-z0-9_-]{43}; Path=\/; HttpOnly; SameSite=Lax; Max-Age=1209600; Secure$/);
   const me = await app.inject({ url: '/api/v1/me', headers: { host, cookie } });
   expect(me.statusCode).toBe(200);
   expect(me.json().me.displayName).toBe('Ada');
@@ -112,7 +120,7 @@ it('rejects state changes without the exact Origin or a JSON body', async () => 
 
 it('requires a session, ignores forged cookies, and hides foreign objects behind 404', async () => {
   expect((await app.inject({ url: '/api/v1/me', headers: { host } })).statusCode).toBe(401);
-  expect((await app.inject({ url: '/api/v1/me', headers: { host, cookie: `__Host-anybots_session=${'A'.repeat(43)}` } })).statusCode).toBe(401);
+  expect((await app.inject({ url: '/api/v1/me', headers: { host, cookie: `__Host-knotcat_session=${'A'.repeat(43)}` } })).statusCode).toBe(401);
   const ada = await signup('Ada');
   const eve = await signup('Eve', '198.51.100.8');
   const agent = (await post('/api/v1/agents', { displayName: 'Mine' }, { cookie: ada.cookie })).json().agent;
@@ -142,7 +150,7 @@ it('connects an app by URL: authorize opens the web app, the signed-in owner app
   expect((await post('/api/v1/oauth/request', { request }, { cookie: both })).json()).toMatchObject({ app: 'Claude', trust: 'known', host: 'claude.ai' });
   const approved = await post('/api/v1/oauth/approve', { request, provider: 'mcp', displayName: 'Claude' }, { cookie: both });
   expect(approved.statusCode).toBe(200);
-  expect(String(approved.headers['set-cookie'])).toContain('anybots_oauth=; HttpOnly; SameSite=Lax; Path=/api/v1/oauth; Max-Age=0');
+  expect(String(approved.headers['set-cookie'])).toContain('knotcat_oauth=; HttpOnly; SameSite=Lax; Path=/api/v1/oauth; Max-Age=0');
   const callback = new URL(approved.json().redirect);
   expect(callback.searchParams.get('state')).toBe('claude-state');
   const tokens = (await app.inject({ method: 'POST', url: '/oauth/token', headers: { host }, payload: { grant_type: 'authorization_code', client_id: clientId,
@@ -185,10 +193,10 @@ it('masks failures and bounds request bodies', async () => {
 });
 
 it('accepts only exact HTTPS app origins outside loopback', () => {
-  expect(appOrigin({ APP_ORIGIN: 'https://anybots.example/' })).toBe('https://anybots.example');
+  expect(appOrigin({ APP_ORIGIN: 'https://knotcat.example/' })).toBe('https://knotcat.example');
   expect(appOrigin({ APP_ORIGIN: 'http://localhost:3000' })).toBe('http://localhost:3000');
   expect(appOrigin({})).toBeUndefined();
-  for (const value of ['http://anybots.example', 'https://anybots.example/app', 'https://u:p@anybots.example', 'https://anybots.example/?x=1']) {
+  for (const value of ['http://knotcat.example', 'https://knotcat.example/app', 'https://u:p@knotcat.example', 'https://knotcat.example/?x=1']) {
     expect(() => appOrigin({ APP_ORIGIN: value })).toThrow();
   }
 });

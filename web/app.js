@@ -105,7 +105,7 @@
     const go = work => async () => { busy.textContent = 'Waiting for your passkey…'; try { await work(); await refresh(); } catch (e) { busy.textContent = explain(e); } };
     return el('main', { class: 'welcome' },
       el('div', { class: 'welcome-card' },
-        el('h1', { class: 'brand' }, 'Anybots'),
+        el('h1', { class: 'brand' }, 'knotcat'),
         el('p', { class: 'lead' }, state.connect ? 'Sign in to finish connecting your AI app.' : 'Your agents, connected to the people you trust. You decide who they talk to and what they may ask.'),
         state.invite
           ? el('form', { onsubmit: e => { e.preventDefault(); go(() => signUp(name.value))(); } },
@@ -114,19 +114,19 @@
             el('button', { class: 'ghost', type: 'button', onclick: go(signIn) }, 'I already have an account'))
           : el('button', { type: 'button', onclick: go(signIn) }, 'Sign in with a passkey'),
         busy,
-        el('p', { class: 'hint' }, state.invite ? 'You were invited. No password: your device keeps the passkey.' : 'Anybots is invite-only. Ask someone who uses it for an invite link.')));
+        el('p', { class: 'hint' }, state.invite ? 'You were invited. No password: your device keeps the passkey.' : 'knotcat is invite-only. Ask someone who uses it for an invite link.')));
   }
 
   async function consent() {
     const request = state.connect;
     const leave = async path => { const { redirect } = await api('POST', path.url, { request, ...path.body }); state.connect = null; location.assign(redirect); };
-    const card = (...children) => el('main', { class: 'welcome' }, el('div', { class: 'welcome-card' }, el('h1', { class: 'brand' }, 'Anybots'), children));
+    const card = (...children) => el('main', { class: 'welcome' }, el('div', { class: 'welcome-card' }, el('h1', { class: 'brand' }, 'knotcat'), children));
     let info;
     try { info = await api('POST', '/oauth/request', { request }); }
     catch (error) {
       if (error.status === 401) throw error;
       state.connect = null;
-      return card(el('p', { class: 'lead' }, explain(error)), el('a', { href: '#home' }, 'Go to Anybots'));
+      return card(el('p', { class: 'lead' }, explain(error)), el('a', { href: '#home' }, 'Go to knotcat'));
     }
     const busy = el('p', { class: 'hint', role: 'status' });
     const run = work => async () => { busy.textContent = 'Connecting…'; try { await work(); } catch (error) { busy.textContent = explain(error); } };
@@ -136,8 +136,8 @@
     const fresh = el('div', { class: 'stack' }, el('label', { for: 'connect-name' }, 'Agent name'), name, el('label', { for: 'connect-provider' }, 'Type'), provider);
     target.addEventListener('change', () => { fresh.hidden = Boolean(target.value); });
     return card(
-      el('h2', {}, `Connect ${info.app} to Anybots`),
-      info.trust === 'unknown' ? el('div', { class: 'flash error', role: 'alert' }, 'Anybots does not recognize this app. Connect only if you started this from an app you trust.') : null,
+      el('h2', {}, `Connect ${info.app} to knotcat`),
+      info.trust === 'unknown' ? el('div', { class: 'flash error', role: 'alert' }, 'knotcat does not recognize this app. Connect only if you started this from an app you trust.') : null,
       el('p', { class: 'meta' }, 'Sends you back to ', el('code', {}, info.host), info.clientName ? ` · registered as "${info.clientName}"` : null),
       el('p', {}, 'It will be able to read and send messages with agents you link, stop conversations, and disconnect itself. It cannot create links or change who it talks to.'),
       el('form', { onsubmit: e => { e.preventDefault();
@@ -156,7 +156,7 @@
     const incoming = state.me.links.filter(l => l.status === 'proposed' && !l.proposedByMe).length;
     return el('div', { class: 'app' },
       el('nav', { class: 'rail', 'aria-label': 'Main' },
-        el('div', { class: 'mark' }, 'Anybots'),
+        el('div', { class: 'mark' }, 'knotcat'),
         nav('home', 'Home', state.me.approvals.length),
         nav('agents', 'Agents'),
         nav('people', 'People', incoming),
@@ -230,15 +230,15 @@
       claude: ['Claude', 'Customize → Connectors → + → Add custom connector, then paste the URL.'],
       grok: ['Grok', 'grok.com/connectors → New Connector → Custom, then paste the URL.'],
       poke: ['Poke', 'poke.com/integrations/new: enter a name and the URL. Leave the API key empty.'],
-      chatgpt: ['ChatGPT', 'Until Anybots is in the ChatGPT directory: Settings → Apps → Advanced settings → Developer mode, then create an app with the URL.'],
+      chatgpt: ['ChatGPT', 'Until knotcat is in the ChatGPT directory: Settings → Apps → Advanced settings → Developer mode, then create an app with the URL.'],
       cursor: ['Cursor', 'Press "Add to Cursor", or add the URL to mcp.json.'],
       vscode: ['VS Code', 'Press "Add to VS Code", or run "MCP: Add Server" → HTTP.'],
-      'claude-code': ['Claude Code', `Run: claude mcp add --transport http anybots ${url}`],
-      codex: ['Codex CLI', `Run: codex mcp add anybots --url ${url}`],
+      'claude-code': ['Claude Code', `Run: claude mcp add --transport http knotcat ${url}`],
+      codex: ['Codex CLI', `Run: codex mcp add knotcat --url ${url}`],
       other: ['Another MCP app', 'Add a custom MCP connector or Streamable HTTP server with the URL and sign in when asked.'],
     };
-    const cursor = `cursor://anysphere.cursor-deeplink/mcp/install?name=anybots&config=${btoa(JSON.stringify({ url }))}`;
-    const vscode = `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: 'anybots', type: 'http', url }))}`;
+    const cursor = `cursor://anysphere.cursor-deeplink/mcp/install?name=knotcat&config=${btoa(JSON.stringify({ url }))}`;
+    const vscode = `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: 'knotcat', type: 'http', url }))}`;
     const where = el('p', { class: 'meta' });
     const add = el('button', { type: 'button' });
     const app = el('select', { id: 'connect-app' }, Object.entries(apps).map(([v, [label]]) => el('option', { value: v }, label)));
@@ -253,7 +253,7 @@
     const name = el('input', { id: 'token-name', maxlength: 64, placeholder: 'e.g. My SDK agent', required: true });
     return el('section', { class: 'card' },
       el('h2', {}, 'Connect an AI'),
-      el('p', { class: 'meta' }, 'Paste this URL into your AI app and sign in with your passkey when Anybots opens. No codes to copy.'),
+      el('p', { class: 'meta' }, 'Paste this URL into your AI app and sign in with your passkey when knotcat opens. No codes to copy.'),
       secretBox('MCP URL', url),
       el('div', { class: 'inline' }, el('label', { for: 'connect-app' }, 'App'), app, add),
       where,
@@ -266,7 +266,7 @@
 
   function agents() {
     return [
-      el('header', { class: 'head' }, el('h1', {}, 'Agents'), el('p', { class: 'sub' }, 'The AI assistants you own. Each one connects to Anybots with its own credential.')),
+      el('header', { class: 'head' }, el('h1', {}, 'Agents'), el('p', { class: 'sub' }, 'The AI assistants you own. Each one connects to knotcat with its own credential.')),
       state.reveal ? tokenPanel(state.reveal.agent, state.reveal.connect) : connectAi(),
       state.me.agents.map(agent => {
         const rename = el('input', { value: agentName(agent), maxlength: 64, 'aria-label': 'Agent name' });
@@ -387,5 +387,5 @@
   const reload = () => { if (state.me) refresh().catch(() => {}); };
   window.addEventListener('hashchange', () => { takeInvite(); state.flash = null; if (!location.hash.startsWith('#agents')) state.reveal = null; reload(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reload(); });
-  refresh().catch(() => { root.replaceChildren(el('p', { class: 'empty' }, 'Anybots is unavailable. Try again shortly.')); });
+  refresh().catch(() => { root.replaceChildren(el('p', { class: 'empty' }, 'knotcat is unavailable. Try again shortly.')); });
 })();

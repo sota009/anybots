@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 
-export const INBOX_CHANNEL = 'anybots_inbox';
-export const OUTBOX_CHANNEL = 'anybots_outbox';
+export const INBOX_CHANNEL = 'knotcat_inbox';
+export const OUTBOX_CHANNEL = 'knotcat_outbox';
 
 export interface Waiter { wait(ms: number): Promise<boolean>; dispose(): void }
 export interface SignalLimits { perBinding: number; total: number }

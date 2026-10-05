@@ -3,7 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
-const connectionString = process.env.TEST_DATABASE_URL ?? 'postgres://anybots:local-development-only@127.0.0.1:55432/anybots';
+const connectionString = process.env.TEST_DATABASE_URL ?? 'postgres://knotcat:local-development-only@127.0.0.1:55432/knotcat';
 const schema = `test_${randomUUID().replaceAll('-', '')}`;
 const directory = new URL('../migrations/', import.meta.url);
 let admin: pg.Pool;

@@ -105,7 +105,7 @@ describe('OAuth: paste the URL, sign in, and approve', () => {
     expect(flow.response.headers.location).toBe(`${issuer}/app#connect=${flow.request}`);
     expect(flow.response.headers['cache-control']).toBe('no-store');
     expect(flow.response.headers['referrer-policy']).toBe('no-referrer');
-    expect(String(flow.response.headers['set-cookie'])).toMatch(/^anybots_oauth=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Lax; Path=\/api\/v1\/oauth; Max-Age=600; Secure$/);
+    expect(String(flow.response.headers['set-cookie'])).toMatch(/^knotcat_oauth=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Lax; Path=\/api\/v1\/oauth; Max-Age=600; Secure$/);
     const saved = JSON.stringify((await db.pool.query('SELECT * FROM oauth_pending')).rows);
     expect(saved).not.toContain(flow.request);
     expect(saved).not.toContain(flow.cookie);

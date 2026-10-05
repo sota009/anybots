@@ -61,7 +61,7 @@ export interface WebOptions { accounts: Accounts; network: Network; origin: stri
 
 export function registerWeb(app: FastifyInstance, options: WebOptions) {
   const secure = options.origin.startsWith('https://');
-  const sessionCookie = secure ? '__Host-anybots_session' : 'anybots_session';
+  const sessionCookie = secure ? '__Host-knotcat_session' : 'knotcat_session';
   const assets = new URL('../web/', import.meta.url);
   const files = {
     html: readFileSync(new URL('app.html', assets), 'utf8'),

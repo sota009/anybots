@@ -66,7 +66,7 @@ export class OAuthPilot {
   readonly resource: string;
   readonly resourceMetadataUrl: string;
   readonly secure: boolean;
-  readonly cookieName = 'anybots_oauth';
+  readonly cookieName = 'knotcat_oauth';
   private readonly trustProxyHops: number;
   constructor(private readonly pool: Pool, options: OAuthOptions) {
     const issuer = new URL(options.issuer);

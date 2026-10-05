@@ -12,17 +12,17 @@ jobs:
       postgres:
         image: postgres:18
         env:
-          POSTGRES_USER: anybots
+          POSTGRES_USER: knotcat
           POSTGRES_PASSWORD: test-only
-          POSTGRES_DB: anybots_test
+          POSTGRES_DB: knotcat_test
         ports: [5432:5432]
         options: >-
-          --health-cmd "pg_isready -U anybots"
+          --health-cmd "pg_isready -U knotcat"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
     env:
-      TEST_DATABASE_URL: postgres://anybots:test-only@localhost:5432/anybots_test
+      TEST_DATABASE_URL: postgres://knotcat:test-only@localhost:5432/knotcat_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,10 +34,10 @@ jobs:
       - name: Verify reusable security evidence checker
         run: python3 -B -m unittest discover -s .agents/skills/web-security-review/scripts -p "test_*.py"
       - run: npm audit --omit=dev --audit-level=high
-      - run: docker build -t anybots:ci .
+      - run: docker build -t knotcat:ci .
       - name: Verify non-root operator directories
         run: >-
-          docker run --rm anybots:ci node -e
+          docker run --rm knotcat:ci node -e
           'const fs=require("node:fs"); if(process.getuid()===0)throw Error("root user");
           for(const path of ["/app/.local","/home/node/.ssh"]){
           fs.accessSync(path,fs.constants.W_OK);
