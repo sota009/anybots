@@ -30,3 +30,14 @@ it('keeps revoked grants revoked when upgrading an existing database', async () 
   const grants = await pool.query('SELECT binding_b,status,active FROM grants ORDER BY binding_b');
   expect(grants.rows).toEqual([{ binding_b: ids[1], status: 'active', active: true }, { binding_b: ids[2], status: 'revoked', active: false }]);
 });
+
+it('turns Muse bindings into generic MCP agents and refuses the old type afterwards', async () => {
+  const owner = randomUUID();
+  const muse = randomUUID();
+  await pool.query('INSERT INTO owners(id) VALUES($1)', [owner]);
+  await pool.query("INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash) VALUES($1,$2,$3,'muse',$3)", [muse, owner, muse]);
+  await apply(name => name.startsWith('010'));
+  expect((await pool.query('SELECT provider FROM bindings WHERE id=$1', [muse])).rows).toEqual([{ provider: 'mcp' }]);
+  const id = randomUUID();
+  await expect(pool.query("INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash) VALUES($1,$2,$3,'muse',$3)", [id, owner, id])).rejects.toThrow(/bindings_provider_check/);
+});

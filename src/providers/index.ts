@@ -2,9 +2,10 @@ import type { Pool } from 'pg';
 import { z } from 'zod';
 import { decryptSecret, webhookHeaders } from './crypto.js';
 import { validateWebhookUrl, type WebhookTransport } from './transport.js';
+import type { Provider } from '../relay.js';
 
 export interface Notification {
-  id: string; bindingId: string; conversationId: string; messageId: string; provider: 'dots' | 'grok' | 'muse'; occurredAt: string; signal?: AbortSignal;
+  id: string; bindingId: string; conversationId: string; messageId: string; provider: Provider; occurredAt: string; signal?: AbortSignal;
 }
 export interface DeliveryResult {
   status: 'accepted' | 'retry' | 'failed' | 'uncertain' | 'configuration_required'; retryAfterMs?: number;
@@ -32,8 +33,8 @@ function classify(status: number, retryAfter?: string): DeliveryResult {
 export class ProviderDispatcher implements NotificationDispatcher {
   constructor(private readonly pool: Pool, private readonly options: ProviderOptions) {}
   async deliver(notification: Notification): Promise<DeliveryResult> {
-    // Muse pulls its inbox; never treat it as an OpenAI event subscriber.
-    if (notification.provider === 'muse') return { status: 'configuration_required' };
+    // Generic MCP agents pull their inbox; never treat them as OpenAI event subscribers.
+    if (notification.provider === 'mcp') return { status: 'configuration_required' };
     const database = this.pool;
     if (notification.provider === 'grok') {
       if (!this.options.grokExperimental) return { status: 'configuration_required' };

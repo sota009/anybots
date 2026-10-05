@@ -6,7 +6,10 @@ import { RelayError } from './errors.js';
 import { INBOX_CHANNEL, OUTBOX_CHANNEL, type Signals } from './signals.js';
 export { RelayError } from './errors.js';
 
-export type Binding = { id: string; ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; oauthFamilyId?: string };
+export const PROVIDERS = ['dots', 'grok', 'mcp'] as const;
+/** dots and grok have vendor wake-ups; mcp is any MCP client that waits on its inbox. */
+export type Provider = typeof PROVIDERS[number];
+export type Binding = { id: string; ownerId: string; runtimeScope: string; provider: Provider; oauthFamilyId?: string };
 type Conversation = { id: string; binding_a: string; binding_b: string; status: string; epoch: number; expires_at: Date; turn_count: number };
 export type Intent = 'ask' | 'coordinate' | 'act';
 export type Message = { id: string; sequence: number; text: string; expectsReply: boolean; intent: Intent; senderBindingId: string; recipientBindingId: string; replyTo: string | null };
@@ -93,11 +96,11 @@ export class Relay {
     return binding.oauthFamilyId ? { oauthFamilyId: binding.oauthFamilyId } : {};
   }
 
-  async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; displayName?: string; token?: string; maxActive?: number }) {
+  async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: Provider; displayName?: string; token?: string; maxActive?: number }) {
     const data = parse(z.object({
       ownerId: z.uuid(),
       runtimeScope: z.string().min(1).max(256),
-      provider: z.enum(['dots', 'grok', 'muse']),
+      provider: z.enum(PROVIDERS),
       displayName: z.string().trim().min(1).max(64).optional(),
       token: z.string().min(32).max(512).optional(),
       maxActive: z.number().int().positive().optional(),
@@ -192,7 +195,7 @@ export class Relay {
   private async deliver(client: PoolClient, messageId: string, c: Pick<Conversation, 'id' | 'epoch'>, recipient: string) {
     // Polling clients still get an atomic delivery record, without scheduling a webhook.
     await client.query(`INSERT INTO outbox(id,message_id,conversation_id,binding_id,epoch,status)
-      SELECT $1,$2,$3,id,$5,CASE WHEN provider='muse' THEN 'not_required' ELSE 'pending' END
+      SELECT $1,$2,$3,id,$5,CASE WHEN provider='mcp' THEN 'not_required' ELSE 'pending' END
       FROM bindings WHERE id=$4`, [randomUUID(), messageId, c.id, recipient, c.epoch]);
     // Delivered only on commit; listeners treat it as a hint and re-check.
     await client.query(`SELECT pg_notify('${INBOX_CHANNEL}',$1), pg_notify('${OUTBOX_CHANNEL}','')`, [recipient]);

@@ -171,7 +171,7 @@ it('supports bounded, secret-free status diagnostics without a credential fetch'
   expect(mock.calls).toHaveLength(1);
 });
 it('accepts Muse polling diagnostics without mistaking skipped notifications for delivery', async () => {
-  const status = { ...diagnostic, binding: { exists: true, active: true, provider: 'muse' },
+  const status = { ...diagnostic, binding: { exists: true, active: true, provider: 'mcp' },
     notification: { configured: false, mode: 'poll' }, outbox: { ...diagnostic.outbox, not_required: 2 } };
   const mock = mockSsh([{ stdout: JSON.stringify(status) }]);
   expect(await run(mock, { action: 'status', bindingId })).toEqual(status);

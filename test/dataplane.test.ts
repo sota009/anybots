@@ -20,7 +20,7 @@ afterAll(async () => { await signals?.stop(); await db?.close(); });
 beforeEach(async () => {
   await db.pool.query('TRUNCATE bindings CASCADE');
   a = await provision(relay, db.pool, { provider: 'dots' });
-  b = await provision(relay, db.pool, { provider: 'muse' });
+  b = await provision(relay, db.pool, { provider: 'mcp' });
   await relay.grantPair(a.bindingId, b.bindingId);
 });
 const open = (text = 'hello') => relay.conversationOpen(a.token, { recipientBindingId: b.bindingId, text, expectsReply: true, idempotencyKey: randomUUID() });

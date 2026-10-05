@@ -74,7 +74,7 @@ it('registers over HTTP with a host-only, secure, HttpOnly, SameSite=Lax session
 
 it('rejects state changes without the exact Origin or a JSON body', async () => {
   const { cookie } = await signup();
-  const body = JSON.stringify({ provider: 'muse', displayName: 'x' });
+  const body = JSON.stringify({ provider: 'mcp', displayName: 'x' });
   for (const headers of [
     { host, cookie, 'content-type': 'application/json' },
     { host, cookie, origin: 'https://evil.example.test', 'content-type': 'application/json' },
@@ -86,7 +86,7 @@ it('rejects state changes without the exact Origin or a JSON body', async () => 
     expect(response.statusCode).toBe(403);
   }
   expect((await db.pool.query('SELECT count(*)::int AS n FROM bindings')).rows[0].n).toBe(0);
-  expect((await post('/api/v1/agents', { provider: 'muse', displayName: 'Mine' }, { cookie })).statusCode).toBe(200);
+  expect((await post('/api/v1/agents', { provider: 'mcp', displayName: 'Mine' }, { cookie })).statusCode).toBe(200);
 });
 
 it('requires a session, ignores forged cookies, and hides foreign objects behind 404', async () => {
@@ -94,7 +94,7 @@ it('requires a session, ignores forged cookies, and hides foreign objects behind
   expect((await app.inject({ url: '/api/v1/me', headers: { host, cookie: `__Host-anybots_session=${'A'.repeat(43)}` } })).statusCode).toBe(401);
   const ada = await signup('Ada');
   const eve = await signup('Eve', '198.51.100.8');
-  const agent = (await post('/api/v1/agents', { provider: 'muse', displayName: 'Mine' }, { cookie: ada.cookie })).json().agent;
+  const agent = (await post('/api/v1/agents', { provider: 'mcp', displayName: 'Mine' }, { cookie: ada.cookie })).json().agent;
   const foreign = await app.inject({ method: 'PATCH', url: `/api/v1/agents/${agent.id}`, payload: '{"displayName":"x"}', headers: { host, origin, cookie: eve.cookie, 'content-type': 'application/json' } });
   const unknown = await app.inject({ method: 'PATCH', url: `/api/v1/agents/${crypto.randomUUID()}`, payload: '{"displayName":"x"}', headers: { host, origin, cookie: eve.cookie, 'content-type': 'application/json' } });
   expect([foreign.statusCode, foreign.json()]).toEqual([404, { error: 'not_found' }]);

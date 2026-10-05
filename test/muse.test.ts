@@ -17,13 +17,13 @@ beforeAll(async () => { db = await testDatabase(); relay = new Relay(db.pool); }
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
   await db.pool.query('TRUNCATE bindings CASCADE');
-  muse = await provision(relay, db.pool, { provider: 'muse' });
+  muse = await provision(relay, db.pool, { provider: 'mcp' });
   grok = await provision(relay, db.pool, { provider: 'grok' });
 });
 
 it('reports polling for Muse without claiming notifications are configured', async () => {
   expect(await readiness(db.pool, { bindingId: muse.bindingId }, { notifications: {} })).toMatchObject({
-    binding: { provider: 'muse' }, notification: { configured: false, mode: 'poll' }, liveVerification: 'not_verified',
+    binding: { provider: 'mcp' }, notification: { configured: false, mode: 'poll' }, liveVerification: 'not_verified',
   });
 });
 
@@ -46,7 +46,7 @@ it('roundtrips through MCP while only Grok delivery consumes notification budget
       expect(result.isError).not.toBe(true);
       return JSON.parse((result.content[0] as { text: string }).text);
     };
-    expect(await call('agents_list', {})).toEqual([{ bindingId: grok.bindingId, provider: 'grok' }]);
+    expect(await call('agents_list', {})).toEqual([{ bindingId: grok.bindingId, provider: 'grok', name: 'grok', owner: 'Unnamed', mine: false, accepts: { ask: 'auto', coordinate: 'auto', act: 'approve' } }]);
     const opened = await call('conversation_open', { recipient_binding_id: grok.bindingId,
       text: 'Hello, Grok', expects_reply: true, idempotency_key: randomUUID() });
     expect(await dispatchOne(db.pool, dispatcher)).toBe(true);
@@ -99,7 +99,7 @@ it('does not let Muse subscribe to OpenAI events or dispatch as a dot', async ()
     name: 'inbox.ready', arguments: {}, delivery: { mode: 'webhook', url: 'https://callbacks.example.test/', secret: `whsec_${randomBytes(32).toString('base64')}` },
   })).rejects.toThrow();
   expect(await new ProviderDispatcher(db.pool, options).deliver({ id: randomUUID(), bindingId: muse.bindingId,
-    conversationId: randomUUID(), messageId: randomUUID(), provider: 'muse', occurredAt: new Date().toISOString() }))
+    conversationId: randomUUID(), messageId: randomUUID(), provider: 'mcp', occurredAt: new Date().toISOString() }))
     .toEqual({ status: 'configuration_required' });
   expect(post).not.toHaveBeenCalled();
 });
