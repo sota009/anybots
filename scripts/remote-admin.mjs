@@ -22,7 +22,7 @@ const commandSchema = z.union([
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const diagnosticSchema = z.strictObject({
   checkedAt: z.iso.datetime(),
-  binding: z.strictObject({ exists: z.boolean(), active: z.boolean(), provider: z.enum(['dots', 'grok', 'muse']).nullable() }),
+  binding: z.strictObject({ exists: z.boolean(), active: z.boolean(), provider: z.enum(['dots', 'grok', 'mcp']).nullable() }),
   oauth: z.strictObject({ configured: z.boolean(), activeFamilies: count }),
   peer: z.strictObject({ exists: z.boolean(), active: z.boolean(), granted: z.boolean() }).nullable(),
   notification: z.strictObject({ configured: z.boolean(), mode: z.literal('poll').optional(), activeSubscriptions: count.optional(), experimentalEnabled: z.boolean().optional(), webhookConfigured: z.boolean().optional() }),

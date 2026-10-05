@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import type { ProviderOptions } from './providers/index.js';
+import type { Provider } from './relay.js';
 
 export interface ReadinessInput { bindingId: string; peerBindingId?: string }
 interface ReadinessOptions {
@@ -27,7 +28,7 @@ export async function readiness(pool: Pool, input: ReadinessInput, options: Read
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const at = (await client.query<{ at: Date }>('SELECT clock_timestamp() AS at')).rows[0]!.at;
-    const found = (await client.query<{ active: boolean; provider: 'dots' | 'grok' | 'muse'; webhook: boolean }>(
+    const found = (await client.query<{ active: boolean; provider: Provider; webhook: boolean }>(
       'SELECT active,provider,webhook_encrypted IS NOT NULL AS webhook FROM bindings WHERE id=$1', [bindingId])).rows[0];
     const binding = { exists: Boolean(found), active: found?.active ?? false, provider: found?.provider ?? null };
     const activeFamilies = options.oauthResource && binding.active
@@ -43,7 +44,7 @@ export async function readiness(pool: Pool, input: ReadinessInput, options: Read
         granted: binding.active && Boolean(other?.active) && Boolean(grant.rowCount) };
     }
     const notification: NotificationStatus = { configured: options.notifications !== undefined };
-    if (binding.provider === 'muse') {
+    if (binding.provider === 'mcp') {
       notification.configured = false;
       notification.mode = 'poll';
     } else if (binding.provider === 'dots') {

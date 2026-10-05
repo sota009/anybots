@@ -6,7 +6,10 @@ import { RelayError } from './errors.js';
 import { INBOX_CHANNEL, OUTBOX_CHANNEL, type Signals } from './signals.js';
 export { RelayError } from './errors.js';
 
-export type Binding = { id: string; ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; oauthFamilyId?: string };
+export const PROVIDERS = ['dots', 'grok', 'mcp'] as const;
+/** dots and grok have vendor wake-ups; mcp is any MCP client that waits on its inbox. */
+export type Provider = typeof PROVIDERS[number];
+export type Binding = { id: string; ownerId: string; runtimeScope: string; provider: Provider; oauthFamilyId?: string };
 type Conversation = { id: string; binding_a: string; binding_b: string; status: string; epoch: number; expires_at: Date; turn_count: number };
 export type Intent = 'ask' | 'coordinate' | 'act';
 export type Message = { id: string; sequence: number; text: string; expectsReply: boolean; intent: Intent; senderBindingId: string; recipientBindingId: string; replyTo: string | null };
@@ -29,7 +32,11 @@ export type OpenInput = z.infer<typeof openSchema>;
 export type FinishInput = z.infer<typeof finishSchema> & { next?: { waitS?: number } };
 export type ClaimInput = z.infer<typeof claimSchema>;
 export type FinishResult = { turnId: string; result: FinishInput['result']; messageId?: string; approval?: 'none' | 'pending' };
-export type Claim = { turnId: string; conversationId: string; epoch: number; leaseExpiresAt: Date; message: Message };
+export type Sender = { bindingId: string; name: string; owner: string; mine: boolean };
+export type Peer = { id: string; provider: Binding['provider']; name: string; owner: string; mine: boolean; accepts: Pick<Policy, Intent> };
+export type Claim = { turnId: string; conversationId: string; epoch: number; leaseExpiresAt: Date; from: Sender; message: Message };
+/** Names come from the relay's records for binding `b` and owner `o`, never from message text. */
+const PEER_NAME = `COALESCE(NULLIF(b.display_name,''), b.provider) AS name, COALESCE(NULLIF(o.display_name,''), 'Unnamed') AS owner`;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -89,11 +96,11 @@ export class Relay {
     return binding.oauthFamilyId ? { oauthFamilyId: binding.oauthFamilyId } : {};
   }
 
-  async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: 'dots' | 'grok' | 'muse'; displayName?: string; token?: string; maxActive?: number }) {
+  async provisionBinding(input: { ownerId: string; runtimeScope: string; provider: Provider; displayName?: string; token?: string; maxActive?: number }) {
     const data = parse(z.object({
       ownerId: z.uuid(),
       runtimeScope: z.string().min(1).max(256),
-      provider: z.enum(['dots', 'grok', 'muse']),
+      provider: z.enum(PROVIDERS),
       displayName: z.string().trim().min(1).max(64).optional(),
       token: z.string().min(32).max(512).optional(),
       maxActive: z.number().int().positive().optional(),
@@ -133,11 +140,15 @@ export class Relay {
     }
   }
 
-  agentsList(token: string) {
+  /** Peer policy for messages from me is what the recipient owner set on their side. */
+  agentsList(token: string): Promise<Peer[]> {
     return this.run(async client => {
       const me = await this.auth(client, token);
-      const result = await client.query<Pick<Binding, 'id' | 'provider'>>(`SELECT id, provider FROM bindings b WHERE b.active AND b.id IN (SELECT CASE WHEN binding_a=$1 THEN binding_b ELSE binding_a END FROM grants WHERE (binding_a=$1 OR binding_b=$1) AND active)`, [me.id]);
-      return result.rows;
+      const result = await client.query<Peer & { policy: Policy }>(`SELECT b.id, b.provider, ${PEER_NAME}, b.owner_id=$2 AS mine,
+          CASE WHEN g.binding_a=b.id THEN g.policy_a ELSE g.policy_b END AS policy
+        FROM grants g JOIN bindings b ON b.id = CASE WHEN g.binding_a=$1 THEN g.binding_b ELSE g.binding_a END JOIN owners o ON o.id=b.owner_id
+        WHERE (g.binding_a=$1 OR g.binding_b=$1) AND g.active AND b.active ORDER BY b.created_at, b.id`, [me.id, me.ownerId]);
+      return result.rows.map(({ policy, ...peer }) => ({ ...peer, accepts: { ask: policy.ask, coordinate: policy.coordinate, act: policy.act } }));
     });
   }
 
@@ -184,7 +195,7 @@ export class Relay {
   private async deliver(client: PoolClient, messageId: string, c: Pick<Conversation, 'id' | 'epoch'>, recipient: string) {
     // Polling clients still get an atomic delivery record, without scheduling a webhook.
     await client.query(`INSERT INTO outbox(id,message_id,conversation_id,binding_id,epoch,status)
-      SELECT $1,$2,$3,id,$5,CASE WHEN provider='muse' THEN 'not_required' ELSE 'pending' END
+      SELECT $1,$2,$3,id,$5,CASE WHEN provider='mcp' THEN 'not_required' ELSE 'pending' END
       FROM bindings WHERE id=$4`, [randomUUID(), messageId, c.id, recipient, c.epoch]);
     // Delivered only on commit; listeners treat it as a hint and re-check.
     await client.query(`SELECT pg_notify('${INBOX_CHANNEL}',$1), pg_notify('${OUTBOX_CHANNEL}','')`, [recipient]);
@@ -282,7 +293,8 @@ export class Relay {
       const turn = await client.query<{ lease_expires_at: Date }>("INSERT INTO turns(id,conversation_id,binding_id,input_message_id,epoch,lease_expires_at) VALUES($1,$2,$3,$4,$5,LEAST($6::timestamptz,clock_timestamp()+interval '10 minutes')) RETURNING lease_expires_at", [turnId, c.id, me.id, row.id, c.epoch, c.expires_at]);
       await client.query('UPDATE conversations SET turn_count=turn_count+1 WHERE id=$1', [c.id]);
       const message = await client.query<Message>(`SELECT ${messageColumns} FROM messages WHERE id=$1`, [row.id]);
-      return { turnId, conversationId: c.id, epoch: c.epoch, leaseExpiresAt: turn.rows[0]!.lease_expires_at, message: message.rows[0]! };
+      const from = await client.query<Sender>(`SELECT b.id AS "bindingId", ${PEER_NAME}, b.owner_id=$2 AS mine FROM bindings b JOIN owners o ON o.id=b.owner_id WHERE b.id=$1`, [message.rows[0]!.senderBindingId, me.ownerId]);
+      return { turnId, conversationId: c.id, epoch: c.epoch, leaseExpiresAt: turn.rows[0]!.lease_expires_at, from: from.rows[0]!, message: message.rows[0]! };
     });
   }
 

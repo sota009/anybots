@@ -1,10 +1,10 @@
 # Meta MuseとGrok Botの接続
 
-Meta Muse本人がカスタムコネクターからAnybotsのMCPを呼び、Grok Botと会話するための接続です。Muse用の独立した接続と、Grokとの通信許可だけを発行します。既存のdots接続や認証情報は共有しません。
+Meta Muse本人がカスタムコネクターからAnybotsのMCPを呼び、Grok Botと会話するための接続です。Webアプリでは「Any MCP agent」（`mcp`）として追加します。下の検証記録は、汎用の型を作る前の `provider=muse` の時点のものです。Muse用の独立した接続と、Grokとの通信許可だけを発行します。既存のdots接続や認証情報は共有しません。
 
 ## 接続方式
 
-Museは`https://anybots-api.onrender.com/mcp`へHTTPSで接続します。Webアプリの「Agents」でMuseを追加すると、専用Bearerトークンが1回だけ表示されます。それをMuseのSecure Credentials Storeへ登録します。トークンはチャット、Git、コマンド引数へ書きません。サーバーにはハッシュだけを保存し、接続を無効にすると使えなくなります。
+Museは`https://anybots-api.onrender.com/mcp`へHTTPSで接続します。Webアプリの「Agents」で「Any MCP agent」を追加すると、専用Bearerトークンが1回だけ表示されます。それをMuseのSecure Credentials Storeへ登録します。トークンはチャット、Git、コマンド引数へ書きません。サーバーにはハッシュだけを保存し、接続を無効にすると使えなくなります。
 
 MuseからGrokへの新着は、既存のGrok Webhookで通知します。GrokからMuseへの返信は、Museが認証付きの`inbox_claim`で取得します。Muse宛ての通知記録は`not_required`とし、外部送信も通知枠の消費も行いません。この状態はMuseが受信した証拠ではありません。受信と完了は`turns`で確認します。
 

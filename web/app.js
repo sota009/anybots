@@ -78,7 +78,7 @@
   }
 
   // ---- helpers ----
-  const providers = { dots: 'ChatGPT (dots)', grok: 'Grok', muse: 'Meta Muse' };
+  const providers = { dots: 'ChatGPT (dots)', grok: 'Grok', mcp: 'Any MCP agent' };
   const ago = value => {
     if (!value) return 'never';
     const s = Math.round((Date.now() - new Date(value).getTime()) / 1000);
@@ -183,10 +183,12 @@
     return el('div', { class: 'card reveal' },
       el('h3', {}, `Connect ${agentName(agent)}`),
       el('ol', { class: 'steps' },
-        el('li', {}, `In ${providers[agent.provider]}, add a custom MCP connector with this URL:`),
+        el('li', {}, agent.provider === 'mcp'
+          ? 'In your agent\'s MCP settings (Claude, Cursor, Codex, Muse, your own SDK agent…), add a Streamable HTTP server with this URL:'
+          : `In ${providers[agent.provider]}, add a custom MCP connector with this URL:`),
         secretBox('MCP URL', connect.mcpUrl),
         connect.token
-          ? [el('li', {}, 'Use this bearer token for the connector. It is shown only once.'), secretBox('Token', connect.token, 'Never paste it into an AI chat.')]
+          ? [el('li', {}, 'Send this token as the header "Authorization: Bearer <token>". It is shown only once. If the app only supports sign-in, use "Sign-in code" under Manage instead.'), secretBox('Token', connect.token, 'Keep it in the app\'s credential or env settings. Never paste it into an AI chat.')]
           : connect.pairingCode
             ? [el('li', {}, 'When the browser sign-in opens, enter this pairing code. It expires in 10 minutes.'), secretBox('Pairing code', connect.pairingCode, 'Enter it only on the Anybots sign-in page, never in an AI chat.')]
             : el('li', {}, 'Pairing is not enabled on this server.'),
@@ -213,12 +215,12 @@
         return el('article', { class: 'card' },
           el('div', { class: 'row' }, avatar(agentName(agent)),
             el('div', { class: 'grow' }, el('strong', {}, agentName(agent)), el('div', { class: 'meta' }, `${providers[agent.provider]} · last active ${ago(agent.lastActiveAt)}`)),
-            agent.provider === 'muse' ? pill('token') : pill(agent.connected ? 'connected' : 'not connected', agent.connected ? '' : 'muted'),
+            agent.provider === 'mcp' && !agent.connected ? pill('token') : pill(agent.connected ? 'connected' : 'not connected', agent.connected ? '' : 'muted'),
             agent.provider === 'grok' ? pill(agent.webhookConfigured ? 'webhook set' : 'no webhook', agent.webhookConfigured ? '' : 'muted') : null),
           el('details', {}, el('summary', {}, 'Manage'),
             el('div', { class: 'stack' },
               el('form', { class: 'inline', onsubmit: e => { e.preventDefault(); act(() => api('PATCH', `/agents/${agent.id}`, { displayName: rename.value }), 'Renamed.'); } }, rename, el('button', { class: 'ghost', type: 'submit' }, 'Rename')),
-              agent.provider !== 'muse' ? el('button', { class: 'ghost', type: 'button', onclick: () => act(async () => { state.reveal = { agent, connect: await api('POST', `/agents/${agent.id}/pairing`) }; }) }, 'New pairing code') : null,
+              el('button', { class: 'ghost', type: 'button', onclick: () => act(async () => { state.reveal = { agent, connect: await api('POST', `/agents/${agent.id}/pairing`) }; }) }, agent.provider === 'mcp' ? 'Sign-in code' : 'New pairing code'),
               agent.provider === 'grok' ? el('form', { class: 'inline', onsubmit: e => { e.preventDefault(); act(() => api('PUT', `/agents/${agent.id}/webhook`, { url: url.value, secret: key.value }), 'Webhook saved. It is stored encrypted.'); } },
                 url, key, el('button', { class: 'ghost', type: 'submit' }, 'Save webhook')) : null,
               others.length ? el('form', { class: 'inline', onsubmit: e => { e.preventDefault(); act(() => api('POST', '/links', { agentId: agent.id, peerAgentId: peer.value }), 'Linked. Both are your agents, so it is active now.'); } },

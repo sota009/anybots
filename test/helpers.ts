@@ -30,7 +30,7 @@ export async function createOwner(pool: pg.Pool): Promise<string> {
 export async function provision(
   relay: Relay,
   pool: pg.Pool,
-  input: { provider: 'dots' | 'grok' | 'muse'; ownerId?: string; runtimeScope?: string },
+  input: { provider: 'dots' | 'grok' | 'mcp'; ownerId?: string; runtimeScope?: string },
 ) {
   const ownerId = input.ownerId ?? await createOwner(pool);
   const binding = await relay.provisionBinding({

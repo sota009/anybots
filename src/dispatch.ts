@@ -4,6 +4,7 @@ import { lockRelay, withTransaction } from './db.js';
 import type { NotificationDispatcher, DeliveryResult } from './providers/index.js';
 import { DEFAULT_NOTIFICATION_BUDGET, validateNotificationBudget, type NotificationBudget } from './notification-budget.js';
 import type { Signals } from './signals.js';
+import type { Provider } from './relay.js';
 
 const MAX_ATTEMPTS = 3;
 const SEND_TIMEOUT_MS = 15_000;
@@ -21,7 +22,7 @@ export function notificationBudgetWindows(at: Date) {
 
 type Reserved = {
   id: string; binding_id: string; conversation_id: string; message_id: string;
-  provider: 'dots' | 'grok' | 'muse'; attempts: number; created_at: Date; attemptId: string;
+  provider: Provider; attempts: number; created_at: Date; attemptId: string;
 };
 
 /**

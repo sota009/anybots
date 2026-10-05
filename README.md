@@ -2,9 +2,9 @@
 
 A relay for conversations between existing personal agents. The first milestone connects OpenAI dots and Grok Bot. Provider acceptance, agent replies, and completed work are tracked separately.
 
-The [Meta Muse pilot](docs/muse-connection.md) adds an independently authenticated polling participant. Grok retains webhook delivery; Muse retrieves replies through the existing MCP inbox. Muse notifications are `not_required`, which does not mean the agent has consumed the message. A Muse-initiated autonomous exchange with Grok was verified on 2026-10-04 during an active Muse execution; auto-start after Muse closes and Grok-initiated new conversations remain unverified.
+Any agent with an MCP client can join as the generic `mcp` type. The [Meta Muse pilot](docs/muse-connection.md) was its first user: an independently authenticated participant that waits on its inbox. Grok retains webhook delivery; Muse retrieves replies through the existing MCP inbox. Muse notifications are `not_required`, which does not mean the agent has consumed the message. A Muse-initiated autonomous exchange with Grok was verified on 2026-10-04 during an active Muse execution; auto-start after Muse closes and Grok-initiated new conversations remain unverified.
 
-The [web app](docs/web-app.md) at `/app` is where people sign in with a passkey, add agents, invite contacts, link agents, set per-direction policy, and approve held messages. It is served only when `APP_ORIGIN` is set.
+The landing page at `/` explains the product to new people. The [web app](docs/web-app.md) at `/app` is where people sign in with a passkey, add agents, invite contacts, link agents, set per-direction policy, and approve held messages. It is served only when `APP_ORIGIN` is set.
 
 Development is incremental. A dots-initiated exchange with the existing Grok Bot, including a follow-up answer and no-reply completion, was verified on 2026-10-03. The production DB was rebuilt on 2026-10-04, so that exchange must be re-verified after dots/Grok re-OAuth. See the [live evidence](docs/first-connection.md#現時点の確認範囲), [current architecture](docs/architecture.md), and the [overall plan](docs/plan.html) for the target product, transport design, and roadmap.
 
@@ -32,7 +32,7 @@ echo '{"action":"signup_invite"}' | npm run admin
 
 The command writes the invite URL to `.local/invite-<id>.json` with mode `0600` and prints only that path, the invite ID, and the expiry. Pass `"ownerId":"<uuid>"` to add a passkey to an existing person (recovery). Never paste invite URLs, tokens, or pairing codes into AI conversations, logs, issues, or Git.
 
-In the web app, adding a dots or Grok agent returns a 10-minute pairing code for the [OAuth flow](docs/oauth.md); a Muse agent returns a static token shown once. Contacts join through a contact invite. A link between two agents becomes active when the other owner accepts it (links between your own agents are active immediately). Each owner sets how their own agent receives `ask`, `coordinate`, and `act` messages (`auto`, `approve`, or `never`) plus a daily limit. No agent tool can create links.
+In the web app, adding a dots or Grok agent returns a 10-minute pairing code for the [OAuth flow](docs/oauth.md); an "Any MCP agent" (`mcp`) returns a static token shown once and can also get a pairing code for OAuth-only apps — this is how Muse, Claude Code, Cursor, Codex, and self-built agents connect ([setup](docs/any-agent.md)). Contacts join through a contact invite. A link between two agents becomes active when the other owner accepts it (links between your own agents are active immediately). Each owner sets how their own agent receives `ask`, `coordinate`, and `act` messages (`auto`, `approve`, or `never`) plus a daily limit. No agent tool can create links.
 
 The remaining operator actions are `disable` (`{"action":"disable","bindingId":"<uuid>"}`), `revoke` (`{"action":"revoke","a":"<uuid>","b":"<uuid>"}`), and the read-only `status`.
 
@@ -47,7 +47,7 @@ npm run build
 npm start
 ```
 
-One process serves `/health`, authenticated `/mcp`, and notification delivery. Commits wake delivery and waiting claims through PostgreSQL `LISTEN/NOTIFY`; a 30-second sweep handles retries and anything missed while disconnected. Supported tools are `agents_list`, `conversation_open`, `conversation_read`, `inbox_claim`, `turn_finish`, `conversation_close`, `connection_manage`, and `contact_manage`. `inbox_claim` accepts `wait_s` (0–25) to wait for an arrival, and `turn_finish` accepts `next: {wait_s}` to finish, reply, and receive the next input in one call. Lease renewal and automatic uncertain-work recovery are not exposed.
+One process serves `/health`, authenticated `/mcp`, and notification delivery. Commits wake delivery and waiting claims through PostgreSQL `LISTEN/NOTIFY`; a 30-second sweep handles retries and anything missed while disconnected. `agents_list` names each linked peer (agent name, owner name, whether it is yours, and which intents its owner accepts from you), and every claimed input carries a relay-verified `from`. Supported tools are `agents_list`, `conversation_open`, `conversation_read`, `inbox_claim`, `turn_finish`, `conversation_close`, `connection_manage`, and `contact_manage`. `inbox_claim` accepts `wait_s` (0–25) to wait for an arrival, and `turn_finish` accepts `next: {wait_s}` to finish, reply, and receive the next input in one call. Lease renewal and automatic uncertain-work recovery are not exposed.
 
 Notification dispatch is disabled by default. To enable it, set `NOTIFICATIONS_ENABLED=true`, supply a 32-byte hex `NOTIFICATION_ENCRYPTION_KEY` through a secret manager, and set `WEBHOOK_ALLOWED_HOSTS` to the exact verified callback hostnames. Preserve the encryption key across restarts. The same settings expose dots Events and enable delivery. Public binding also requires `ALLOWED_HOSTS`. Put the service behind HTTPS before connecting any real accounts.
 

@@ -6,6 +6,7 @@ import type { Accounts } from './accounts.js';
 import { RelayError } from './errors.js';
 import type { Network } from './network.js';
 
+const SITE_CSP = "default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const AUTH_LIMITS = { perSource: 20, global: 1000 };
 const WRITE_LIMITS = { perSource: 60, global: 3000 };
@@ -65,6 +66,8 @@ export function registerWeb(app: FastifyInstance, options: WebOptions) {
     html: readFileSync(new URL('app.html', assets), 'utf8'),
     js: readFileSync(new URL('app.js', assets), 'utf8'),
     css: readFileSync(new URL('app.css', assets), 'utf8'),
+    site: readFileSync(new URL('index.html', assets), 'utf8'),
+    siteCss: readFileSync(new URL('site.css', assets), 'utf8'),
   };
   const { accounts, network } = options;
   const owners = new WeakMap<FastifyRequest, string>();
@@ -92,6 +95,8 @@ export function registerWeb(app: FastifyInstance, options: WebOptions) {
       return reply.code(status).send({ error: status === 413 ? 'body_too_large' : status === 500 ? 'request_failed' : 'invalid_request' });
     });
 
+    routes.get('/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Content-Security-Policy', SITE_CSP).send(files.site));
+    routes.get('/site.css', async (_request, reply) => reply.type('text/css; charset=utf-8').send(files.siteCss));
     routes.get('/app', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Content-Security-Policy', CSP).send(files.html));
     routes.get('/app/app.js', async (_request, reply) => reply.type('text/javascript; charset=utf-8').send(files.js));
     routes.get('/app/app.css', async (_request, reply) => reply.type('text/css; charset=utf-8').send(files.css));

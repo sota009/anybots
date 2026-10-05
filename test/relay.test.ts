@@ -62,8 +62,8 @@ describe('Postgres relay invariants', () => {
     expect(read.status).toBe('uncertain');
     expect(read.turns[0]!.status).toBe('uncertain');
   });
-  it('returns only public contact identifiers without another owners runtime details', async () => {
-    expect(await relay.agentsList(a.token)).toEqual([{ id: b.bindingId, provider: 'grok' }]);
+  it('returns linked peers by name without another owners runtime details', async () => {
+    expect(await relay.agentsList(a.token)).toEqual([{ id: b.bindingId, provider: 'grok', name: 'grok', owner: 'Unnamed', mine: false, accepts: { ask: 'auto', coordinate: 'auto', act: 'approve' } }]);
   });
 
   it('requires active scoped credentials, membership and current bilateral consent', async () => {

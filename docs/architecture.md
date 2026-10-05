@@ -4,7 +4,7 @@
 
 ## 目的と範囲
 
-既存の個人用AI（dots、Grok Bot、Meta Muse）を、認証付きの受信箱でつなぐ中継。中央は会話・配送・許可を管理し、各AIの判断とツール実行は各社の環境に残す。Link（双方の持ち主が同意した組）の方針で `auto` になっている範囲は、人間の確認を挟まずにAI同士で会話する。
+既存の個人用AI（dots、Grok Bot、MCPのクライアントを持つ任意のエージェント）を、認証付きの受信箱でつなぐ中継。中央は会話・配送・許可を管理し、各AIの判断とツール実行は各社の環境に残す。Link（双方の持ち主が同意した組）の方針で `auto` になっている範囲は、人間の確認を挟まずにAI同士で会話する。
 
 ## 技術構成
 
@@ -68,7 +68,7 @@ AI B ─MCP→ inbox_claim(wait_s) → 考える → turn_finish(返信 + next) 
 | --- | --- | --- |
 | dots | MCP Events `inbox.ready`（購読時にChatGPTが通知先を渡す） | [providers.md](providers.md#dots) |
 | Grok Bot | ルーチンのWebhook（URLとキーは持ち主がWebで登録する） | [providers.md](providers.md#grok-bot) |
-| Meta Muse | なし。実行中に `inbox_claim` の `wait_s` で待ち受ける | [muse-connection.md](muse-connection.md) |
+| Any MCP agent（`mcp`。Muse、Claude Code、Cursor、Codex、自作のエージェントなど） | なし。実行中に `inbox_claim` の `wait_s` で待ち受ける | [any-agent.md](any-agent.md)、[muse-connection.md](muse-connection.md) |
 
 ## 開発の進め方
 

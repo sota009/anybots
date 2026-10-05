@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Add a static landing page at `/` (no scripts, forms, external resources, or trackers; script-free CSP).
+- Replace the Muse-only provider with `mcp` ("Any MCP agent"): a token shown once, or an OAuth pairing code for apps that only support sign-in. Migration 010 converts existing `muse` bindings. Per-client setup is in `docs/any-agent.md`.
+- `agents_list` now returns each linked peer's agent name, owner name, whether it is yours, and which intents its owner accepts from you; claimed inputs carry a relay-verified `from`.
+- Record the 2026-10 review of A2A v1.0, MCP Tasks, orchestration frameworks, competing products, and multi-agent security research in the plan.
+
 ## 0.2.0
 
 - Replace operator provisioning, directory credentials, the `/directory` UI, and the connections CLI with a web app at `/app`: invite-only passkey accounts, agents, contacts, links that the other owner accepts, and web approvals.

@@ -252,6 +252,10 @@ Run both directions, including a follow-up question, restart, duplicate event,
 revoked permission, and stop during pending delivery. Record separately:
 notification accepted, inbox claimed, reply committed, and remote task verified.
 
-## Meta Muse
+## Any MCP agent (`mcp`)
 
-The Muse pilot uses a custom connector with a dedicated Bearer credential and authenticated inbox polling. Meta documents custom connectors and its Secure Credentials Store at https://www.meta.com/help/artificial-intelligence/1687253048996149/ and scheduled tasks at https://www.meta.com/help/artificial-intelligence/1484325780075655/ (checked October 3, 2026 via Composio/Exa). No generic incoming webhook for consumer Muse has been verified. A 401 response is not proof of a successful MCP handshake. See [the setup and evidence boundaries](muse-connection.md).
+Any agent with an MCP client connects as provider `mcp`: a Bearer token shown once, or an OAuth pairing code for apps that only support OAuth (redirects limited to the exact `OAUTH_REDIRECT_URIS` allowlist). There is no wake-up channel; the agent waits with `inbox_claim` `wait_s` while it runs. Per-client setup is in [any-agent.md](any-agent.md).
+
+### Meta Muse
+
+Muse connects as `mcp`. The pilot (recorded as `provider=muse` before the generic type existed) uses a custom connector with a dedicated Bearer credential and authenticated inbox polling. Meta documents custom connectors and its Secure Credentials Store at https://www.meta.com/help/artificial-intelligence/1687253048996149/ and scheduled tasks at https://www.meta.com/help/artificial-intelligence/1484325780075655/ (checked October 3, 2026 via Composio/Exa). No generic incoming webhook for consumer Muse has been verified. A 401 response is not proof of a successful MCP handshake. See [the setup and evidence boundaries](muse-connection.md).

@@ -44,6 +44,21 @@ it('serves the app with a strict CSP and no-store headers, and no external resou
   expect(script.body).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/);
 });
 
+it('serves a static landing page without scripts, forms, or external resources', async () => {
+  const page = await app.inject({ url: '/', headers: { host } });
+  expect(page.statusCode).toBe(200);
+  expect(page.headers['content-type']).toContain('text/html');
+  expect(page.headers['content-security-policy']).toBe("default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+  expect(page.headers).toMatchObject({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
+  expect(page.body).not.toMatch(/https?:\/\/|<script|<form|<iframe|\sstyle=|\son[a-z]+=/i);
+  expect(page.body).toContain('href="/app"');
+  expect(page.body).toContain('href="/site.css"');
+  const css = await app.inject({ url: '/site.css', headers: { host } });
+  expect(css.statusCode).toBe(200);
+  expect(css.headers['content-type']).toContain('text/css');
+  expect(css.body).not.toMatch(/@import|url\(/);
+});
+
 it('registers over HTTP with a host-only, secure, HttpOnly, SameSite=Lax session cookie', async () => {
   const { verified, cookie } = await signup();
   expect(verified.statusCode).toBe(200);
@@ -59,7 +74,7 @@ it('registers over HTTP with a host-only, secure, HttpOnly, SameSite=Lax session
 
 it('rejects state changes without the exact Origin or a JSON body', async () => {
   const { cookie } = await signup();
-  const body = JSON.stringify({ provider: 'muse', displayName: 'x' });
+  const body = JSON.stringify({ provider: 'mcp', displayName: 'x' });
   for (const headers of [
     { host, cookie, 'content-type': 'application/json' },
     { host, cookie, origin: 'https://evil.example.test', 'content-type': 'application/json' },
@@ -71,7 +86,7 @@ it('rejects state changes without the exact Origin or a JSON body', async () => 
     expect(response.statusCode).toBe(403);
   }
   expect((await db.pool.query('SELECT count(*)::int AS n FROM bindings')).rows[0].n).toBe(0);
-  expect((await post('/api/v1/agents', { provider: 'muse', displayName: 'Mine' }, { cookie })).statusCode).toBe(200);
+  expect((await post('/api/v1/agents', { provider: 'mcp', displayName: 'Mine' }, { cookie })).statusCode).toBe(200);
 });
 
 it('requires a session, ignores forged cookies, and hides foreign objects behind 404', async () => {
@@ -79,7 +94,7 @@ it('requires a session, ignores forged cookies, and hides foreign objects behind
   expect((await app.inject({ url: '/api/v1/me', headers: { host, cookie: `__Host-anybots_session=${'A'.repeat(43)}` } })).statusCode).toBe(401);
   const ada = await signup('Ada');
   const eve = await signup('Eve', '198.51.100.8');
-  const agent = (await post('/api/v1/agents', { provider: 'muse', displayName: 'Mine' }, { cookie: ada.cookie })).json().agent;
+  const agent = (await post('/api/v1/agents', { provider: 'mcp', displayName: 'Mine' }, { cookie: ada.cookie })).json().agent;
   const foreign = await app.inject({ method: 'PATCH', url: `/api/v1/agents/${agent.id}`, payload: '{"displayName":"x"}', headers: { host, origin, cookie: eve.cookie, 'content-type': 'application/json' } });
   const unknown = await app.inject({ method: 'PATCH', url: `/api/v1/agents/${crypto.randomUUID()}`, payload: '{"displayName":"x"}', headers: { host, origin, cookie: eve.cookie, 'content-type': 'application/json' } });
   expect([foreign.statusCode, foreign.json()]).toEqual([404, { error: 'not_found' }]);

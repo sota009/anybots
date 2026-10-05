@@ -76,6 +76,7 @@
   <a href="#permissions">許可と追跡</a>
   <a href="#strategy">勝ち筋</a>
   <a href="#mvp">MVPと段階計画</a>
+  <a href="#review">2026-10の再確認</a>
   <a href="#unverified">未検証の前提</a>
   <a href="#docs">資料の整理</a>
 </nav>
@@ -353,6 +354,47 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
   <li><b>未検証</b>：本番での動作、実アカウント（dots・Grok・Muse）での往復時間の計測、実機のパスキー、利用者が説明なしで招待から承認まで完了できるか。</li>
 </ul>
 <p class="note">各段階で、資料の更新 → 失敗するテストの作成 → 最小実装 → 不要コードの削除、の順に進める。認証・認可・外部通信・資源制限に関わる段階（1〜3、5）では、<code>web-security-review</code> の手順で <a href="security.md">セキュリティ設計</a>と回帰試験を更新する。</p>
+
+<h2 id="review">10.5 2026-10-05の再確認：標準・既存の仕組み・競合・研究</h2>
+<p class="note"><b>目標：どんなエージェントでも接続できること。</b>会社ごとの専用口（dots・Grok）は「起こし方」のためだけに持つ。それ以外はMCPのクライアントを持つエージェントなら誰でも使える汎用の型（<code>mcp</code>：トークンかOAuth）でつなぐ。MCPを持たないエージェントはA2Aの入口（段階5）でつなぐ。</p>
+<p class="lead">結論：<b>土台の方針（制御面を1つ、データ面は相手に合わせる）は変えない。</b>最速でMVPを出すために足りないのは、新しい通信方式ではなく、①外向けの入口（LP）、②AIが「誰と話しているか」を分かること、③v0.2.0での実アカウントの往復の再確認、の3つ。</p>
+<h3>標準</h3>
+<table>
+<tr><th>対象</th><th>2026-10時点の状況</th><th>Anybotsの判断</th></tr>
+<tr><td><a href="https://a2a-protocol.org/latest/specification/">A2A v1.0</a></td><td>Linux Foundationで150以上の組織が支持。Agent CardのJWS署名（RFC 8785で正規化）、<code>supportedInterfaces</code>、Device Code・PKCE、マルチテナント</td><td>一般向けAIは今もA2Aの受け口を持たないので、主経路はMCPのまま。A2Aの入口は段階5。Agent Cardを公開すると「誰がどのAIを使っているか」が漏れるため、公開カードには個人を載せず、つながった相手だけに拡張カードを見せる</td></tr>
+<tr><td><a href="https://tasks.extensions.modelcontextprotocol.io/">MCP 2026-07-28とTasks拡張</a></td><td>ツール呼び出しに長時間の仕事の識別子を返し、<code>input_required</code> で途中の入力を求められる</td><td>承認待ち（<code>approval='pending'</code>）と同じ形。ChatGPT・Grokが対応したと確認できてから載せる（未検証）。今は <code>wait_s</code> の待ち受けで足りる</td></tr>
+</table>
+<h3>既存のオーケストレーション</h3>
+<p>LangGraph・CrewAI・AutoGen・OpenAI Agents SDK・Google ADKは、<b>1人の持ち主の中で</b>複数のAIを動かす仕組み。持ち主をまたぐ同意と取り消しは範囲外。<a href="https://arxiv.org/abs/2609.00267">2026年9月の研究</a>では、このうち3つに権限の閉じ込めが組み込まれていなかった。競合ではなく、将来A2Aでつながる相手として扱う。</p>
+<h3>競合と近いプロダクト</h3>
+<table>
+<tr><th>名前</th><th>やっていること</th><th>Anybotsとの差</th></tr>
+<tr><td>Instinct（評価額100億ドル）</td><td>「信頼できる人のネットワーク」で、友達のInstinct同士が予定を合わせる</td><td>自社のAIだけで閉じている</td></tr>
+<tr><td>Pickle（iPhone、月$8.99）</td><td>友達のPickle同士が会話し、持ち主を紹介する。共有範囲は持ち主が決める</td><td>自社のAIだけ。利用者は今使っているAIを持ち込めない</td></tr>
+<tr><td>shapes.inc（月間40万人）、Teamily（調達2,000万ドル）</td><td>人とAIのグループチャット</td><td>自社アプリの中のAIだけ</td></tr>
+<tr><td>doxx.net（調達3,800万ドル）</td><td>人とAIの私設ネットワーク（P2P）</td><td>通信路が中心。人と人の許可の層は持たない</td></tr>
+<tr><td><a href="https://github.com/fujibee/agmsg">agmsg</a></td><td>同じPC上のCLIのAI同士でメッセージを送る</td><td>同じ持ち主だけ。遠隔接続には認証がない</td></tr>
+</table>
+<p class="note">共通点：資金も利用者も「AI同士が人の代わりに調整する」に集まっている。どれも自社のAIか同じ持ち主の中で閉じている。<b>「今使っている違う会社のAIを持ち込み、持ち主どうしが許した範囲だけでつなぐ」は空いている。</b>LPの主張はここに絞る。</p>
+<h3>研究</h3>
+<ul>
+  <li><a href="https://arxiv.org/abs/2609.00267">Delegation Without Trust</a>：「AIが完全に乗っ取られても、委ねられた権限を超えられない」ことを正しさの基準にする。判定はAIの外で行う。Anybotsの方針判定は中継側で行うので、この基準に沿っている。intentは送る側の自己申告で、この点は残余リスクとして既に記録している。</li>
+  <li><a href="https://arxiv.org/abs/2609.22949">マルチエージェントのプロンプトインジェクション</a>：送り主の出どころを付ける（署名と追跡）と、AI間のインジェクションが91%減った。Anybotsでは、受け取ったメッセージに中継側が確認した送り主（Agent名と持ち主名）を付ける。本文の中の自称は信用しない。同じ研究の「書式のなりすまし」（システムの指示に見える文字列）に備えて、名前では改行や見えない書式文字を拒否する。</li>
+  <li><a href="https://github.com/usedhonda/dots-device">ESP32とMCP Events・Secure MCP Tunnelの事例</a>：通知は合図だけにして、状態は認証済みのツールで取り直す。HTTPの2xxを「処理済み」と扱わない。予約と結果を別に記録し、再試行を再生と区別する。どれもAnybotsのデータ面と同じ考え方。Tunnelは社内のMCPサーバーをOpenAIの経路で外に出す仕組みで、データはOpenAIを通る。AnybotsにつなぐAIは中継へ外向きに接続するので、Tunnelは使わない。</li>
+  <li><a href="https://www.ietf.org/archive/id/draft-asor-wimse-agent-delegation-chain-00.html">IETFの委任チェーンの草案</a>：A2Aで外部へ委ねるとき（段階5）の権限の縮小に使う候補。</li>
+</ul>
+<h3>MVPに足りないもの（優先順）</h3>
+<table>
+<tr><th>#</th><th>足りないもの</th><th>対応</th></tr>
+<tr><td>1</td><td><code>/</code> が404で、何のサービスか伝わる入口がない</td><td><b>今回</b>：<code>/</code> にLPを置く（スクリプトなし、外部資源なし）</td></tr>
+<tr><td>2</td><td><code>agents_list</code> がIDと提供元しか返さず、受け取ったメッセージに送り主の名前がない。「ママのAIに聞いて」を正しい相手に結べない</td><td><b>今回</b>：相手のAgent名・持ち主名・自分のAgentか・相手が受け付けるintentを返す。受け取りには、中継側で確認した送り主を付ける</td></tr>
+<tr><td>2b</td><td>接続できるのがdots・Grok・Museの専用口だけ</td><td><b>今回</b>：Museの型を汎用の <code>mcp</code>（Any MCP agent）に置き換え、トークンとOAuthの接続コードのどちらでもつなげるようにする</td></tr>
+<tr><td>3</td><td>v0.2.0での実アカウントの往復が未確認</td><td>利用者の再接続のあとに記録する</td></tr>
+<tr><td>4</td><td>最初の1人の招待にSSHが必要</td><td>次の段階：運営向けのWeb招待</td></tr>
+<tr><td>5</td><td>起こせないAIの持ち主へのお知らせがない</td><td>次の段階：メールかプッシュ通知</td></tr>
+<tr><td>6</td><td>デモ動画と、成功の指標の集計</td><td>往復を確認したあとに撮る。<code>status</code> に指標の件数を足す</td></tr>
+</table>
+<p class="note">判定：1・2・3が揃えば、<b>招待制のベータとして最速で出せる</b>。一般公開（自己登録、課金、複数台構成）はMVPに入れない。</p>
 
 <h2 id="unverified">11. 未検証の前提（検証するまで完成とは言わない）</h2>
 <table>
