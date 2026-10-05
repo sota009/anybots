@@ -45,6 +45,8 @@ it('serves the app with a strict CSP and no-store headers, and no external resou
   const script = await app.inject({ url: '/app/app.js', headers: { host } });
   expect(script.headers['content-type']).toContain('text/javascript');
   expect(script.body).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/);
+  expect(script.body).toContain("'/oauth/approve'");
+  expect(script.body).not.toMatch(/pairing/i);
 });
 
 it('serves a static landing page without scripts, forms, or external resources', async () => {

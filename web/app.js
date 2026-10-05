@@ -2,7 +2,7 @@
 // Every user-controlled string is rendered with textContent, never parsed as HTML.
 (() => {
   const root = document.getElementById('root');
-  const state = { me: null, invite: null, pendingInvite: null, flash: null, reveal: null };
+  const state = { me: null, invite: null, pendingInvite: null, connect: null, flash: null, reveal: null };
 
   const el = (tag, props = {}, ...children) => {
     const node = document.createElement(tag);
@@ -39,6 +39,8 @@
     unavailable: 'This is not enabled on this server yet.',
     invalid_input: 'Check the fields and try again.',
     conversation_stopped: 'That conversation has already stopped.',
+    invalid_request: 'This connection request is invalid or expired. Start again from your AI app.',
+    forbidden: 'Unrecognized apps can only create a new agent.',
   };
   const explain = error => messages[error?.code] || (error?.name === 'NotAllowedError' ? 'Passkey request was cancelled.' : 'Something went wrong. Try again.');
 
@@ -78,7 +80,7 @@
   }
 
   // ---- helpers ----
-  const providers = { dots: 'ChatGPT (dots)', grok: 'Grok', mcp: 'Any MCP agent' };
+  const providers = { dots: 'ChatGPT (dots)', grok: 'Grok Bot', mcp: 'Any MCP agent' };
   const ago = value => {
     if (!value) return 'never';
     const s = Math.round((Date.now() - new Date(value).getTime()) / 1000);
@@ -104,7 +106,7 @@
     return el('main', { class: 'welcome' },
       el('div', { class: 'welcome-card' },
         el('h1', { class: 'brand' }, 'Anybots'),
-        el('p', { class: 'lead' }, 'Your agents, connected to the people you trust. You decide who they talk to and what they may ask.'),
+        el('p', { class: 'lead' }, state.connect ? 'Sign in to finish connecting your AI app.' : 'Your agents, connected to the people you trust. You decide who they talk to and what they may ask.'),
         state.invite
           ? el('form', { onsubmit: e => { e.preventDefault(); go(() => signUp(name.value))(); } },
             el('label', { for: 'name' }, 'Display name'), name,
@@ -113,6 +115,39 @@
           : el('button', { type: 'button', onclick: go(signIn) }, 'Sign in with a passkey'),
         busy,
         el('p', { class: 'hint' }, state.invite ? 'You were invited. No password: your device keeps the passkey.' : 'Anybots is invite-only. Ask someone who uses it for an invite link.')));
+  }
+
+  async function consent() {
+    const request = state.connect;
+    const leave = async path => { const { redirect } = await api('POST', path.url, { request, ...path.body }); state.connect = null; location.assign(redirect); };
+    const card = (...children) => el('main', { class: 'welcome' }, el('div', { class: 'welcome-card' }, el('h1', { class: 'brand' }, 'Anybots'), children));
+    let info;
+    try { info = await api('POST', '/oauth/request', { request }); }
+    catch (error) {
+      if (error.status === 401) throw error;
+      state.connect = null;
+      return card(el('p', { class: 'lead' }, explain(error)), el('a', { href: '#home' }, 'Go to Anybots'));
+    }
+    const busy = el('p', { class: 'hint', role: 'status' });
+    const run = work => async () => { busy.textContent = 'Connecting…'; try { await work(); } catch (error) { busy.textContent = explain(error); } };
+    const name = el('input', { id: 'connect-name', maxlength: 64, value: info.suggested.displayName, required: true });
+    const provider = el('select', { id: 'connect-provider' }, Object.entries(providers).map(([v, l]) => el('option', { value: v, selected: v === info.suggested.provider }, l)));
+    const target = el('select', { id: 'connect-target' }, el('option', { value: '' }, 'A new agent'), info.agents.map(a => el('option', { value: a.id }, agentName(a))));
+    const fresh = el('div', { class: 'stack' }, el('label', { for: 'connect-name' }, 'Agent name'), name, el('label', { for: 'connect-provider' }, 'Type'), provider);
+    target.addEventListener('change', () => { fresh.hidden = Boolean(target.value); });
+    return card(
+      el('h2', {}, `Connect ${info.app} to Anybots`),
+      info.trust === 'unknown' ? el('div', { class: 'flash error', role: 'alert' }, 'Anybots does not recognize this app. Connect only if you started this from an app you trust.') : null,
+      el('p', { class: 'meta' }, 'Sends you back to ', el('code', {}, info.host), info.clientName ? ` · registered as "${info.clientName}"` : null),
+      el('p', {}, 'It will be able to read and send messages with agents you link, stop conversations, and disconnect itself. It cannot create links or change who it talks to.'),
+      el('form', { onsubmit: e => { e.preventDefault();
+        run(() => leave({ url: '/oauth/approve', body: target.value ? { agentId: target.value } : { provider: provider.value, displayName: name.value } }))(); } },
+        info.agents.length ? [el('label', { for: 'connect-target' }, 'Connect as'), target] : null,
+        fresh,
+        el('div', { class: 'actions' },
+          el('button', { type: 'submit' }, 'Connect'),
+          el('button', { class: 'ghost', type: 'button', onclick: run(() => leave({ url: '/oauth/deny' })) }, 'Cancel'))),
+      busy);
   }
 
   function shell(view) {
@@ -169,7 +204,7 @@
               return el('li', {}, el('a', { href: `#link/${l.id}` }, other), el('span', { class: 'meta' }, ` · ${own ? 'you' : l.peerOwnerName}`));
             }))
               : el('p', { class: 'meta' }, 'Not linked to anyone yet.'));
-        })) : el('p', { class: 'empty' }, 'Add your first agent to get started. ', el('a', { href: '#agents' }, 'Add an agent'))),
+        })) : el('p', { class: 'empty' }, 'Connect your first AI to get started. ', el('a', { href: '#agents' }, 'Connect an AI'))),
       el('section', {}, el('h2', {}, 'Recent activity'),
         recent.length ? el('ol', { class: 'feed' }, recent.map(m => el('li', {},
           el('div', { class: 'meta' }, `${m.fromAgentName || 'Agent'} → ${m.toAgentName || 'agent'} · ${ago(m.createdAt)} · ${m.intent}`,
@@ -179,32 +214,60 @@
           : el('p', { class: 'empty' }, 'No conversations yet.'))];
   }
 
-  function connectPanel(agent, connect) {
+  function tokenPanel(agent, connect) {
     return el('div', { class: 'card reveal' },
-      el('h3', {}, `Connect ${agentName(agent)}`),
+      el('h3', {}, `Access token for ${agentName(agent)}`),
       el('ol', { class: 'steps' },
-        el('li', {}, agent.provider === 'mcp'
-          ? 'In your agent\'s MCP settings (Claude, Cursor, Codex, Muse, your own SDK agent…), add a Streamable HTTP server with this URL:'
-          : `In ${providers[agent.provider]}, add a custom MCP connector with this URL:`),
-        secretBox('MCP URL', connect.mcpUrl),
-        connect.token
-          ? [el('li', {}, 'Send this token as the header "Authorization: Bearer <token>". It is shown only once. If the app only supports sign-in, use "Sign-in code" under Manage instead.'), secretBox('Token', connect.token, 'Keep it in the app\'s credential or env settings. Never paste it into an AI chat.')]
-          : connect.pairingCode
-            ? [el('li', {}, 'When the browser sign-in opens, enter this pairing code. It expires in 10 minutes.'), secretBox('Pairing code', connect.pairingCode, 'Enter it only on the Anybots sign-in page, never in an AI chat.')]
-            : el('li', {}, 'Pairing is not enabled on this server.'),
-        agent.provider === 'grok' ? el('li', {}, 'Then add the Grok routine webhook below so Grok wakes up when a message arrives.') : null),
+        el('li', {}, 'Point your agent at this Streamable HTTP URL:'), secretBox('MCP URL', connect.mcpUrl),
+        el('li', {}, 'Send this token as the header "Authorization: Bearer <token>". It is shown only once.'),
+        secretBox('Token', connect.token, 'Keep it in the app\'s credential or env settings. Never paste it into an AI chat.')),
       el('button', { class: 'ghost small', type: 'button', onclick: () => { state.reveal = null; render(); } }, 'Done'));
   }
 
+  function connectAi() {
+    const url = state.me.mcpUrl;
+    const apps = {
+      claude: ['Claude', 'Customize → Connectors → + → Add custom connector, then paste the URL.'],
+      grok: ['Grok', 'grok.com/connectors → New Connector → Custom, then paste the URL.'],
+      poke: ['Poke', 'poke.com/integrations/new: enter a name and the URL. Leave the API key empty.'],
+      chatgpt: ['ChatGPT', 'Until Anybots is in the ChatGPT directory: Settings → Apps → Advanced settings → Developer mode, then create an app with the URL.'],
+      cursor: ['Cursor', 'Press "Add to Cursor", or add the URL to mcp.json.'],
+      vscode: ['VS Code', 'Press "Add to VS Code", or run "MCP: Add Server" → HTTP.'],
+      'claude-code': ['Claude Code', `Run: claude mcp add --transport http anybots ${url}`],
+      codex: ['Codex CLI', `Run: codex mcp add anybots --url ${url}`],
+      other: ['Another MCP app', 'Add a custom MCP connector or Streamable HTTP server with the URL and sign in when asked.'],
+    };
+    const cursor = `cursor://anysphere.cursor-deeplink/mcp/install?name=anybots&config=${btoa(JSON.stringify({ url }))}`;
+    const vscode = `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: 'anybots', type: 'http', url }))}`;
+    const where = el('p', { class: 'meta' });
+    const add = el('button', { type: 'button' });
+    const app = el('select', { id: 'connect-app' }, Object.entries(apps).map(([v, [label]]) => el('option', { value: v }, label)));
+    const show = () => {
+      where.textContent = apps[app.value][1];
+      const link = { cursor: ['Add to Cursor', cursor], vscode: ['Add to VS Code', vscode] }[app.value];
+      add.hidden = !link;
+      if (link) { add.textContent = link[0]; add.onclick = () => location.assign(link[1]); }
+    };
+    app.addEventListener('change', show);
+    show();
+    const name = el('input', { id: 'token-name', maxlength: 64, placeholder: 'e.g. My SDK agent', required: true });
+    return el('section', { class: 'card' },
+      el('h2', {}, 'Connect an AI'),
+      el('p', { class: 'meta' }, 'Paste this URL into your AI app and sign in with your passkey when Anybots opens. No codes to copy.'),
+      secretBox('MCP URL', url),
+      el('div', { class: 'inline' }, el('label', { for: 'connect-app' }, 'App'), app, add),
+      where,
+      el('details', {}, el('summary', {}, 'Use an access token'),
+        el('form', { class: 'inline', onsubmit: e => { e.preventDefault();
+          act(async () => { state.reveal = await api('POST', '/agents', { displayName: name.value }); }); } },
+          el('label', { for: 'token-name' }, 'Name'), name, el('button', { class: 'ghost', type: 'submit' }, 'Create token')),
+        el('p', { class: 'hint' }, 'Only for agents you build that can send a header but cannot sign in.')));
+  }
+
   function agents() {
-    const provider = el('select', { id: 'provider' }, Object.entries(providers).map(([v, l]) => el('option', { value: v }, l)));
-    const name = el('input', { id: 'agent-name', maxlength: 64, placeholder: 'e.g. My ChatGPT', required: true });
     return [
       el('header', { class: 'head' }, el('h1', {}, 'Agents'), el('p', { class: 'sub' }, 'The AI assistants you own. Each one connects to Anybots with its own credential.')),
-      state.reveal ? connectPanel(state.reveal.agent, state.reveal.connect) : null,
-      el('form', { class: 'card inline', onsubmit: e => { e.preventDefault();
-        act(async () => { const r = await api('POST', '/agents', { provider: provider.value, displayName: name.value }); state.reveal = r; }); } },
-        el('label', { for: 'provider' }, 'Provider'), provider, el('label', { for: 'agent-name' }, 'Name'), name, el('button', { type: 'submit' }, 'Add agent')),
+      state.reveal ? tokenPanel(state.reveal.agent, state.reveal.connect) : connectAi(),
       state.me.agents.map(agent => {
         const rename = el('input', { value: agentName(agent), maxlength: 64, 'aria-label': 'Agent name' });
         const url = el('input', { type: 'url', placeholder: 'https://api2.cursor.sh/automations/webhook/…', 'aria-label': 'Webhook URL' });
@@ -220,7 +283,6 @@
           el('details', {}, el('summary', {}, 'Manage'),
             el('div', { class: 'stack' },
               el('form', { class: 'inline', onsubmit: e => { e.preventDefault(); act(() => api('PATCH', `/agents/${agent.id}`, { displayName: rename.value }), 'Renamed.'); } }, rename, el('button', { class: 'ghost', type: 'submit' }, 'Rename')),
-              el('button', { class: 'ghost', type: 'button', onclick: () => act(async () => { state.reveal = { agent, connect: await api('POST', `/agents/${agent.id}/pairing`) }; }) }, agent.provider === 'mcp' ? 'Sign-in code' : 'New pairing code'),
               agent.provider === 'grok' ? el('form', { class: 'inline', onsubmit: e => { e.preventDefault(); act(() => api('PUT', `/agents/${agent.id}/webhook`, { url: url.value, secret: key.value }), 'Webhook saved. It is stored encrypted.'); } },
                 url, key, el('button', { class: 'ghost', type: 'submit' }, 'Save webhook')) : null,
               others.length ? el('form', { class: 'inline', onsubmit: e => { e.preventDefault(); act(() => api('POST', '/links', { agentId: agent.id, peerAgentId: peer.value }), 'Linked. Both are your agents, so it is active now.'); } },
@@ -304,7 +366,7 @@
 
   async function render() {
     if (!state.me) { root.replaceChildren(welcome()); return; }
-    try { root.replaceChildren(shell(await view())); }
+    try { root.replaceChildren(state.connect ? await consent() : shell(await view())); }
     catch (error) {
       if (error.status === 401) { state.me = null; root.replaceChildren(welcome()); return; }
       root.replaceChildren(shell(el('p', { class: 'empty' }, explain(error))));
@@ -318,8 +380,8 @@
   }
 
   const takeInvite = () => {
-    const match = location.hash.match(/^#invite=([A-Za-z0-9_-]{43})$/);
-    if (match) { state.invite = match[1]; history.replaceState(null, '', '/app'); }
+    const match = location.hash.match(/^#(invite|connect)=([A-Za-z0-9_-]{43})$/);
+    if (match) { state[match[1]] = match[2]; history.replaceState(null, '', '/app'); }
   };
   takeInvite();
   const reload = () => { if (state.me) refresh().catch(() => {}); };
