@@ -14,7 +14,7 @@ let relay: Relay;
 let accounts: Accounts;
 beforeAll(async () => {
   db = await testDatabase();
-  directory = await mkdtemp(join(tmpdir(), 'anybots-admin-'));
+  directory = await mkdtemp(join(tmpdir(), 'knotcat-admin-'));
   await chmod(directory, 0o700);
   relay = new Relay(db.pool);
   accounts = new Accounts(db.pool, { origin });

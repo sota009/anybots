@@ -59,4 +59,4 @@ process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 await app.listen({ host, port: Number(process.env.PORT ?? '3000') });
 dispatcher?.start();
-console.log('Anybots listening. Live provider verification is still required.');
+console.log('knotcat listening. Live provider verification is still required.');

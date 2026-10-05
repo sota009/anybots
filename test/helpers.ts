@@ -5,7 +5,7 @@ import { Relay } from '../src/relay.js';
 import { encryptSecret } from '../src/providers/crypto.js';
 
 export async function testDatabase() {
-  const connectionString = process.env.TEST_DATABASE_URL ?? 'postgres://anybots:local-development-only@127.0.0.1:55432/anybots';
+  const connectionString = process.env.TEST_DATABASE_URL ?? 'postgres://knotcat:local-development-only@127.0.0.1:55432/knotcat';
   const admin = new pg.Pool({ connectionString });
   const schema = `test_${randomUUID().replaceAll('-', '')}`;
   await admin.query(`CREATE SCHEMA ${schema}`);

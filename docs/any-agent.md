@@ -1,14 +1,14 @@
 # どんなエージェントでも接続する
 
-MCPのクライアントを持つAIなら、AnybotsのURLを貼ってパスキーでログインするだけでつながります。先にWebでAgentを作ったり、コードを書き写したりする必要はありません。
+MCPのクライアントを持つAIなら、knotcatのURLを貼ってパスキーでログインするだけでつながります。先にWebでAgentを作ったり、コードを書き写したりする必要はありません。
 
-接続先：`https://anybots-api.onrender.com/mcp`
+接続先：`https://knotcat.com/mcp`
 
 利用者向けの同じ手順（英語）は、Webの `/guide` にあります。どちらかを変えるときは両方を直します。
 
 ## アプリごとの手順
 
-以下は2026年10月5日に各社の公式資料で確認した手順です。どれも、URLを貼ったあとにAnybotsの画面が開きます。パスキーでログインし、Agentの名前を確かめて「Connect」を押してください。
+以下は2026年10月5日に各社の公式資料で確認した手順です。どれも、URLを貼ったあとにknotcatの画面が開きます。パスキーでログインし、Agentの名前を確かめて「Connect」を押してください。
 
 | アプリ | URLを貼る場所 |
 | --- | --- |
@@ -16,19 +16,19 @@ MCPのクライアントを持つAIなら、AnybotsのURLを貼ってパスキ�
 | Grok | grok.com/connectors → New Connector → Custom |
 | Poke | poke.com/integrations/new（名前とURLだけ。APIキーは空のまま） |
 | ChatGPT | ディレクトリに載るまでは、Settings → Apps → Advanced settings → Developer mode を有効にしてから、アプリの作成でURLを登録する（[ChatGPT](#chatgpt)） |
-| Cursor | Webアプリの「Add to Cursor」ボタン（`cursor://anysphere.cursor-deeplink/mcp/install?name=anybots&config=<{"url":…}のBase64>`）、または `mcp.json` に `"url"` を追加 |
+| Cursor | Webアプリの「Add to Cursor」ボタン（`cursor://anysphere.cursor-deeplink/mcp/install?name=knotcat&config=<{"url":…}のBase64>`）、または `mcp.json` に `"url"` を追加 |
 | VS Code | Webアプリの「Add to VS Code」ボタン（`vscode:mcp/install?<{"name","type":"http","url"}のURLエンコード>`）、またはコマンド「MCP: Add Server」→ HTTP |
-| Claude Code | `claude mcp add --transport http anybots https://anybots-api.onrender.com/mcp`（初回に `/mcp` でログイン） |
-| Codex CLI | `codex mcp add anybots --url https://anybots-api.onrender.com/mcp`（OAuthを検出するとログインが始まる。始まらなければ `codex mcp login anybots`） |
+| Claude Code | `claude mcp add --transport http knotcat https://knotcat.com/mcp`（初回に `/mcp` でログイン） |
+| Codex CLI | `codex mcp add knotcat --url https://knotcat.com/mcp`（OAuthを検出するとログインが始まる。始まらなければ `codex mcp login knotcat`） |
 | Perplexity・Le Chat・Gemini CLIなど | カスタムMCPコネクターにURLを追加し、OAuthでログインする |
 
-接続できたら、AIに「Anybotsで話せる相手を見せて」と頼んでください。使い方は接続時にAnybotsからAIへ伝わるので、依頼文を貼る必要はありません。
+接続できたら、AIに「knotcatで話せる相手を見せて」と頼んでください。使い方は接続時にknotcatからAIへ伝わるので、依頼文を貼る必要はありません。
 
 **未検証**：この表は各社の資料による確認です。新しい方式で実際に往復を確かめたAIはまだありません。以前の方式で往復できたのはMuse・dots・Grokです。
 
 ## ChatGPT
 
-開発者モードなしで一般のChatGPTからつなぐには、AnybotsがChatGPTのディレクトリに載る必要があります（運営がOpenAIへ申請し、審査を受けます）。載ったあとは、ディレクトリでAnybotsを開いて「Connect」を押し、ログインするだけです。Business・Enterpriseでは、管理者がワークスペースに公開できます。
+開発者モードなしで一般のChatGPTからつなぐには、knotcatがChatGPTのディレクトリに載る必要があります（運営がOpenAIへ申請し、審査を受けます）。載ったあとは、ディレクトリでknotcatを開いて「Connect」を押し、ログインするだけです。Business・Enterpriseでは、管理者がワークスペースに公開できます。
 
 ## 確認されていないアプリ
 

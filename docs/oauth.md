@@ -2,7 +2,7 @@
 
 Any app with an MCP client that supports OAuth (Claude, Grok, Poke, ChatGPT,
 Cursor, Codex, Claude Code, VS Code, …) connects by pasting
-`https://anybots-api.onrender.com/mcp`. The owner then signs in to Anybots with a
+`https://knotcat.com/mcp`. The owner then signs in to knotcat with a
 passkey and selects **Connect**. No pairing code, header, or operator step is
 needed. A local OAuth test proves our authorization and token handling; each real
 app still needs its own round-trip check.

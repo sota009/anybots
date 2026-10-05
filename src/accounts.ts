@@ -77,7 +77,7 @@ export class Accounts {
       const ownerId = invite.target_owner_id ?? randomUUID();
       const existing = await client.query<{ id: string; transports: string[] }>('SELECT id,transports FROM passkeys WHERE owner_id=$1', [ownerId]);
       const options = await generateRegistrationOptions({
-        rpName: this.options.rpName ?? 'Anybots', rpID: this.rpId, userID: uuidBytes(ownerId),
+        rpName: this.options.rpName ?? 'knotcat', rpID: this.rpId, userID: uuidBytes(ownerId),
         userName: data.displayName, userDisplayName: data.displayName, attestationType: 'none',
         authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
         excludeCredentials: existing.rows.map(row => ({ id: row.id, transports: row.transports })),

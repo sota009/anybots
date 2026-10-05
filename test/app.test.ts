@@ -33,7 +33,7 @@ describe('authenticated stateless MCP over PostgreSQL', () => {
     await relay.grantPair(a.bindingId, b.bindingId);
   });
   async function connect(token: string) {
-    const client = new Client({ name: 'anybots-test', version: '1.0.0' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } });
+    const client = new Client({ name: 'knotcat-test', version: '1.0.0' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } });
     clients.push(client);
     await client.connect(new StreamableHTTPClientTransport(new URL(`${address}/mcp`), {
       requestInit: { headers: { authorization: `Bearer ${token}` } },
@@ -57,6 +57,7 @@ describe('authenticated stateless MCP over PostgreSQL', () => {
 
   it('connects official clients, lists strict schemas, and completes a persisted round trip', async () => {
     const alice = await connect(a.token);
+    expect(alice.getServerVersion()?.name).toBe('knotcat');
     const bob = await connect(b.token);
     const listed = await alice.listTools();
     expect(listed.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([

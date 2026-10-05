@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0
+
+- Rename the product from Anybots to knotcat (a service with the same name already existed): UI, landing page, guide, passkey RP name, MCP server name and instructions, cookie names (`__Host-knotcat_session`, `knotcat_oauth`), notification channels, package and local database names. Existing sessions end and users sign in again.
+- Production moves to `https://knotcat.com` (see `docs/render-deployment.md` for the cutover order). Passkeys and OAuth connections are bound to the old origin and must be registered again after the switch.
+
 ## 0.4.0
 
 - Connect any MCP app by pasting the URL: open dynamic client registration for https callbacks, loopback, and the Cursor callback; `/oauth/authorize` sends the browser to a consent screen in `/app` where the owner signs in with a passkey and presses Connect. The agent is created on consent; pairing codes, `OAUTH_REDIRECT_URIS`, and `OAUTH_ALLOW_NATIVE_LOOPBACK` are removed (migration 011).

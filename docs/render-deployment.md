@@ -4,7 +4,7 @@
 
 2026年10月3日、利用者の了承を得てRenderの「My Workspace」に3サービスを作成しました。初回公開時にAPIとworkerの`live`、DBの`available`を確認しました。初回公開コードはPR #5のマージコミット`c986ab2a5e47e85f69b52a518354229ea4590f53`です。
 
-MCPの接続先は`https://anybots-api.onrender.com/mcp`です。`/health`の200応答、未認証の`/mcp`の401応答、OAuthメタデータの公開元を確認しました。形式の正しい無効トークンでも401を返し、DB上の認証テーブルを参照できることを確認しています。
+当時のMCPの接続先は`https://anybots-api.onrender.com/mcp`でした。`/health`の200応答、未認証の`/mcp`の401応答、OAuthメタデータの公開元を確認しました。形式の正しい無効トークンでも401を返し、DB上の認証テーブルを参照できることを確認しています。
 
 同日、v0.1.5のコミット`725e36f`を公開しました。利用者が登録した公開鍵でRenderの管理用SSH認証に成功し、公開済みの管理CLIで`status`を実行しました。同日、PR #10のマージコミット`c136f96`、v0.1.6へ更新しました。認証成功後は専用の完了画面から戻り先へ移動し、`no-store`・`no-referrer`・同一オリジンのフォーム制限を確認しました。
 
@@ -21,6 +21,20 @@ MCPの接続先は`https://anybots-api.onrender.com/mcp`です。`/health`の200
 - `NOTIFICATION_ENCRYPTION_KEY`は値がツール出力に表示されたため作り直した。旧鍵で暗号化した購読秘密は使えないので、dotsは再OAuthの後に購読し直す。
 
 認証の試行制限は、外向きIPが1つに固定された環境から確認した。1分に20回を超えると429になる。`X-Forwarded-For`の値を毎回変えて送っても、制限を回避できない。`TRUST_PROXY_HOPS=3`では、毎回変わるプロキシのIPを数えてしまい、制限が効かなかった。`1`は、外向きIPが毎回変わる環境からしか試しておらず、未検証。dots/Grokの再OAuthと、実アカウントでの会話は未確認。
+
+## ドメイン（knotcat.com）
+
+2026年10月5日、同名のサービスがあったため、プロダクト名をAnybotsからknotcatに変えた。公開先は `https://knotcat.com` の1つで、LP・`/guide`・`/app`・`/mcp`・OAuthを同じオリジンで出す。Renderのサービス名（`anybots-api`・`anybots-db`）と `onrender.com` のURLは変えられないので、そのまま残る。
+
+- **Render**：`anybots-api` のCustom Domainsに `knotcat.com` を追加した。`www.knotcat.com` は `knotcat.com` へ転送される。
+- **DNS（Cloudflare）**：`@` と `www` のCNAMEを `anybots-api.onrender.com` へ向ける。Proxy statusは **DNS only** にする。プロキシを有効にすると中継が1段増え、`TRUST_PROXY_HOPS=2` で読む送信元がずれて、送信元ごとの上限が効かなくなる。`AAAA` レコードは置かない。
+- **切り替えの順序**：
+  1. RenderでDNSの確認が通り、証明書が出たことを確かめる
+  2. `ALLOWED_HOSTS`・`OAUTH_ISSUER`・`APP_ORIGIN` を表の値に変えてデプロイする
+  3. パスキーはドメインに結びつくので、各自の既存アカウントに `signup_invite`（`ownerId` 付き）で新しいパスキーを登録し直す
+  4. OAuthのトークンは接続先URLに結びつくので、各AIを新しいURLで接続し直す（許可画面の「Connect as」で既存のAgentを選ぶとLinkが残る）
+  5. Renderの `onrender.com` のURLを無効にする
+- 後方互換は作らない。切り替えた後、`anybots-api.onrender.com` は受け付けない。
 
 ## 構成と費用
 
@@ -64,9 +78,9 @@ APIは`node dist/main.js`で起動します。MCP、Webアプリ、通知の配�
 
 | 環境変数 | 値 |
 | --- | --- |
-| `ALLOWED_HOSTS` | `anybots-api.onrender.com` |
-| `OAUTH_ISSUER` | `https://anybots-api.onrender.com` |
-| `APP_ORIGIN` | `https://anybots-api.onrender.com`（`ALLOWED_HOSTS`に含まれ、`OAUTH_ISSUER`と同じであること） |
+| `ALLOWED_HOSTS` | `knotcat.com` |
+| `OAUTH_ISSUER` | `https://knotcat.com` |
+| `APP_ORIGIN` | `https://knotcat.com`（`ALLOWED_HOSTS`に含まれ、`OAUTH_ISSUER`と同じであること） |
 | `TRUST_PROXY_HOPS` | `2`（`X-Forwarded-For`の右から2番目を利用者とみなす。2026年10月4日に本番で確認） |
 | `NOTIFICATIONS_ENABLED` | `true` |
 | `NOTIFICATION_ENCRYPTION_KEY` | 32バイトの乱数の16進表記。作り直すと保存済みのGrok Webhookとdots購読の秘密を復号できなくなり、登録し直しが必要 |
