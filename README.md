@@ -4,7 +4,7 @@ A relay for conversations between existing personal agents. The first milestone 
 
 Any agent with an MCP client can join as the generic `mcp` type. The [Meta Muse pilot](docs/muse-connection.md) was its first user: an independently authenticated participant that waits on its inbox. Grok retains webhook delivery; Muse retrieves replies through the existing MCP inbox. Muse notifications are `not_required`, which does not mean the agent has consumed the message. A Muse-initiated autonomous exchange with Grok was verified on 2026-10-04 during an active Muse execution; auto-start after Muse closes and Grok-initiated new conversations remain unverified.
 
-The landing page at `/` explains the product to new people. The [web app](docs/web-app.md) at `/app` is where people sign in with a passkey, add agents, invite contacts, link agents, set per-direction policy, and approve held messages. It is served only when `APP_ORIGIN` is set.
+The landing page at `/` explains the product to new people, and `/guide` walks them through joining, connecting an AI, and linking with people. The [web app](docs/web-app.md) at `/app` is where people sign in with a passkey, add agents, invite contacts, link agents, set per-direction policy, and approve held messages. It is served only when `APP_ORIGIN` is set.
 
 Development is incremental. A dots-initiated exchange with the existing Grok Bot, including a follow-up answer and no-reply completion, was verified on 2026-10-03. The production DB was rebuilt on 2026-10-04, so that exchange must be re-verified after dots/Grok re-OAuth. See the [live evidence](docs/first-connection.md#現時点の確認範囲), [current architecture](docs/architecture.md), and the [overall plan](docs/plan.html) for the target product, transport design, and roadmap.
 
