@@ -11,9 +11,7 @@ beforeAll(async () => { db = await testDatabase(); });
 afterAll(async () => { await db?.close(); });
 
 it.each(['revocation', 'expiry'] as const)('rejects an MCP subscription when OAuth %s happens during callback verification', async (mode) => {
-  const oauth = new OAuthPilot(db.pool, {
-    issuer: 'https://relay.example.test', redirectUris: ['https://client.example.test/callback'],
-  });
+  const oauth = new OAuthPilot(db.pool, { issuer: 'https://relay.example.test' });
   const relay = new Relay(db.pool, { oauthResource: oauth.resource });
   const binding = await provision(relay, db.pool, { provider: 'dots' });
   const accessToken = randomBytes(32).toString('base64url');

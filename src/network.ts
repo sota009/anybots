@@ -4,13 +4,10 @@ import { z } from 'zod';
 import { displayName } from './accounts.js';
 import { lockRelay, withTransaction } from './db.js';
 import { RelayError } from './errors.js';
-import type { OAuthPilot } from './oauth.js';
 import { encryptSecret } from './providers/crypto.js';
 import { grokWebhook, grokWebhookUrl } from './providers/index.js';
-import { PROVIDERS, type Policy, type Provider, type Relay } from './relay.js';
+import { MAX_AGENTS, type Policy, type Provider, type Relay } from './relay.js';
 
-const MAX_AGENTS = 20;
-const PAIRINGS_PER_HOUR = 10;
 const uuid = z.uuid();
 const decision = z.enum(['auto', 'approve', 'never']);
 const policySchema = z.strictObject({ ask: decision, coordinate: decision, act: decision, dailyLimit: z.number().int().min(1).max(1000) });
@@ -26,7 +23,6 @@ type LinkRow = { id: string; binding_a: string; binding_b: string; status: strin
 
 export interface NetworkOptions {
   mcpUrl: string;
-  oauth?: OAuthPilot;
   webhook?: { encryptionKey: Buffer; hosts: string[] };
 }
 
@@ -95,26 +91,18 @@ export class Network {
         LEFT JOIN outbox o ON o.message_id=m.id LEFT JOIN turns t ON t.input_message_id=m.id
         WHERE s.owner_id=$1 OR r.owner_id=$1 ORDER BY m.created_at DESC LIMIT 20`, [ownerId]);
       await client.query('COMMIT');
-      return { me, agents: agents.rows, contacts: contacts.rows, links: links.rows, approvals: approvals.rows, recent: recent.rows };
+      return { me, mcpUrl: this.options.mcpUrl, agents: agents.rows, contacts: contacts.rows, links: links.rows, approvals: approvals.rows, recent: recent.rows };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally { client.release(); }
   }
 
+  /** Token agents are for self-built clients that only send headers; apps that support OAuth create their agent on consent. */
   async createAgent(ownerId: string, input: unknown) {
-    const data = parse(z.strictObject({ provider: z.enum(PROVIDERS), displayName }), input);
-    const created = await this.relay.provisionBinding({ ownerId, runtimeScope: randomUUID(), provider: data.provider, displayName: data.displayName, maxActive: MAX_AGENTS });
-    const connect = data.provider === 'mcp'
-      ? { mcpUrl: this.options.mcpUrl, token: created.token }
-      : { mcpUrl: this.options.mcpUrl, ...await this.issuePairing(created.bindingId) };
-    return { agent: { id: created.bindingId, displayName: data.displayName, provider: data.provider }, connect };
-  }
-
-  private async issuePairing(bindingId: string) {
-    if (!this.options.oauth) return { pairing: 'unavailable' as const };
-    const issued = await this.options.oauth.issuePairingCode(bindingId);
-    return { pairingCode: issued.pairingCode, expiresAt: issued.expiresAt };
+    const data = parse(z.strictObject({ displayName }), input);
+    const created = await this.relay.provisionBinding({ ownerId, runtimeScope: randomUUID(), provider: 'mcp', displayName: data.displayName, maxActive: MAX_AGENTS });
+    return { agent: { id: created.bindingId, displayName: data.displayName, provider: 'mcp' as const }, connect: { mcpUrl: this.options.mcpUrl, token: created.token } };
   }
 
   async renameAgent(ownerId: string, id: string, input: unknown) {
@@ -126,18 +114,6 @@ export class Network {
     });
   }
 
-  async pairing(ownerId: string, id: string) {
-    await this.tx(async client => {
-      await this.agent(client, ownerId, id);
-      const hour = Math.floor(Date.now() / 3600_000);
-      const hit = await client.query<{ hits: number }>(`INSERT INTO web_rates(bucket,hits,expires_at) VALUES($1,1,clock_timestamp()+interval '2 hours')
-        ON CONFLICT(bucket) DO UPDATE SET hits=web_rates.hits+1 RETURNING hits`, [`pairing:${id}:${hour}`]);
-      if (hit.rows[0]!.hits > PAIRINGS_PER_HOUR) throw new RelayError('rate_limited', 'Too many pairing codes', 429);
-    });
-    return { mcpUrl: this.options.mcpUrl, ...await this.issuePairing(id) };
-  }
-
-  /** The stored value is encrypted with the agent ID as context; only "configured" is ever returned. */
   async setWebhook(ownerId: string, id: string, input: unknown) {
     const data = parse(grokWebhook, input);
     const webhook = this.options.webhook;

@@ -24,6 +24,7 @@ const notifications = process.env.NOTIFICATIONS_ENABLED === 'true' ? notificatio
 const oauth = oauthFromEnvironment(pool);
 const origin = appOrigin();
 if (origin && allowedHosts && !allowedHosts.includes(new URL(origin).hostname)) throw new Error('APP_ORIGIN must be one of ALLOWED_HOSTS');
+if (oauth && oauth.issuer !== origin) throw new Error('OAUTH_ISSUER must equal APP_ORIGIN, where consent happens');
 const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? '0');
 if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0 || trustProxyHops > 3) throw new Error('TRUST_PROXY_HOPS must be 0-3');
 const signals = new Signals(pool);
@@ -35,10 +36,9 @@ const dispatcher = notifications ? new Dispatcher(pool, new ProviderDispatcher(p
 }) : undefined;
 const relay = new Relay(pool, { signals, ...(oauth ? { oauthResource: oauth.resource } : {}) });
 const web = origin ? {
-  origin, trustProxyHops, accounts: new Accounts(pool, { origin }),
+  origin, trustProxyHops, accounts: new Accounts(pool, { origin }), ...(oauth ? { oauth } : {}),
   network: new Network(pool, relay, {
-    mcpUrl: `${oauth?.issuer ?? origin}/mcp`,
-    ...(oauth ? { oauth } : {}),
+    mcpUrl: `${origin}/mcp`,
     ...(notifications ? { webhook: { encryptionKey: notifications.encryptionKey, hosts: notifications.webhookHosts ?? [] } } : {}),
   }),
 } : undefined;

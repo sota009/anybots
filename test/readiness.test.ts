@@ -24,7 +24,6 @@ describe('operator onboarding status over real Postgres', () => {
     expect(result).toMatchObject({ binding: { exists: true, active: true, provider: 'dots' },
       oauth: { configured: false, activeFamilies: 0 }, peer: null, liveVerification: 'not_verified' });
     expect(await relay.authenticate(a.token)).toMatchObject({ id: a.bindingId });
-    expect((await db.pool.query('SELECT count(*)::int AS n FROM oauth_pairings')).rows[0].n).toBe(0);
     await expect(admin({ relay }, { action: 'status', bindingId: a.bindingId })).rejects.toThrow();
   });
 
