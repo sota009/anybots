@@ -44,6 +44,21 @@ it('serves the app with a strict CSP and no-store headers, and no external resou
   expect(script.body).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/);
 });
 
+it('serves a static landing page without scripts, forms, or external resources', async () => {
+  const page = await app.inject({ url: '/', headers: { host } });
+  expect(page.statusCode).toBe(200);
+  expect(page.headers['content-type']).toContain('text/html');
+  expect(page.headers['content-security-policy']).toBe("default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+  expect(page.headers).toMatchObject({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
+  expect(page.body).not.toMatch(/https?:\/\/|<script|<form|<iframe|\sstyle=|\son[a-z]+=/i);
+  expect(page.body).toContain('href="/app"');
+  expect(page.body).toContain('href="/site.css"');
+  const css = await app.inject({ url: '/site.css', headers: { host } });
+  expect(css.statusCode).toBe(200);
+  expect(css.headers['content-type']).toContain('text/css');
+  expect(css.body).not.toMatch(/@import|url\(/);
+});
+
 it('registers over HTTP with a host-only, secure, HttpOnly, SameSite=Lax session cookie', async () => {
   const { verified, cookie } = await signup();
   expect(verified.statusCode).toBe(200);
