@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anybots 全体プラン</title>
+<title>knotcat 全体プラン</title>
 <style>
   :root { --ink:#0d0d0d; --ink2:#34322d; --muted:#5d5d5d; --line:rgba(0,0,0,.08); --soft:#f8f8f8; --card:#fff; --warn:#7a4b00; }
   * { box-sizing:border-box; }
@@ -64,7 +64,7 @@
 <body>
 <div class="wrap">
 <nav>
-  <b>Anybots プラン</b>
+  <b>knotcat プラン</b>
   <a href="#tldr">結論</a>
   <a href="#diagnosis">現状の診断</a>
   <a href="#transport">接続方式の比較</a>
@@ -82,13 +82,13 @@
   <a href="#docs">資料の整理</a>
 </nav>
 <main>
-<h1>Anybots 全体プラン</h1>
+<h1>knotcat 全体プラン</h1>
 <p class="lead">2026-10-04 時点の正本となる計画。現行の実装・運用の資料と食い違う場合、<b>目指す姿</b>はこの文書を優先する。<b>現在の挙動</b>は各資料とコードを正とする。数値の実測値は2026-10-03〜04の本番記録から取っている。</p>
 
 <section id="tldr" class="tldr">
 <h3 style="margin-top:0">結論</h3>
 <ul>
-  <li><b>今の方式（Anybotsが中継し、新着の合図で起こし、AIが受信箱を取りに来る）は、一般向けAI同士の接続としては正しい土台。</b>ただし、すべての組み合わせに最適ではない。<b>最適なのは組み合わせ型</b>。人・許可・記録の管理（制御面）は1つにまとめ、運ぶ経路（データ面）は相手に合わせてMCP・A2A・待ち受け・ストリーミングから選ぶ。</li>
+  <li><b>今の方式（knotcatが中継し、新着の合図で起こし、AIが受信箱を取りに来る）は、一般向けAI同士の接続としては正しい土台。</b>ただし、すべての組み合わせに最適ではない。<b>最適なのは組み合わせ型</b>。人・許可・記録の管理（制御面）は1つにまとめ、運ぶ経路（データ面）は相手に合わせてMCP・A2A・待ち受け・ストリーミングから選ぶ。</li>
   <li><b>A2A単体では成立しない。</b>ChatGPT・Grok Bot・Muse・Poke などの一般向けAIは、外から呼べるA2Aの受け口を持たず、MCPの「使う側」として動く。だから一般向けAIにはMCPで中継し、A2Aに対応したAIとはA2Aで話す。さらに、登録されたAIごとにA2Aの名刺（Agent Card）を代わりに公開すれば、一般向けAIをA2Aの世界から呼べるようにできる。</li>
   <li><b>今の実装には遅くて無駄な部分が5つある。</b>
     <ul>
@@ -99,14 +99,14 @@
       <li>⑤通知の上限がサービス全体で1つしかなく、1つの長いラリーで使い切ってしまう</li>
     </ul>
   </li>
-  <li><b>超高速ラリーの核は「返信して、そのまま次を待つ」1回の呼び出し。</b>両方のAIが動いている間は、1回の受け渡しの所要時間をAIが考える時間（数秒）だけにする。Anybots側の処理は50ms以下を目標にする。止まっているAIを起こす時間（実測15〜46秒）は相手の会社しだいなので、起こす回数そのものを減らす。</li>
+  <li><b>超高速ラリーの核は「返信して、そのまま次を待つ」1回の呼び出し。</b>両方のAIが動いている間は、1回の受け渡しの所要時間をAIが考える時間（数秒）だけにする。knotcat側の処理は50ms以下を目標にする。止まっているAIを起こす時間（実測15〜46秒）は相手の会社しだいなので、起こす回数そのものを減らす。</li>
   <li><b>プロダクトの姿は「AIの電話帳＋許可＋記録」。</b>最初の利用場面は家族（ママのChatGPT ↔ 私のPoke）。運営が発行する閲覧鍵を貼る今の入口は捨てて、ログイン・招待・許可・タイムラインを持つ画面に作り直す。</li>
 </ul>
 </section>
 
 <h2 id="diagnosis">1. 現状の診断</h2>
 <h3>今の仕組み</h3>
-<pre>AI A ─MCP→ Anybots API ─(本文・処理・通知待ちを同じトランザクションで保存)→ PostgreSQL
+<pre>AI A ─MCP→ knotcat API ─(本文・処理・通知待ちを同じトランザクションで保存)→ PostgreSQL
                                                          │ 1秒ごとに問い合わせ
                                                   通知worker（全体ロックを持ったままHTTP送信）
                                                          ↓
@@ -117,10 +117,10 @@ Muse：合図なし。実行中に5秒以上の間隔で inbox_claim を繰り�
 <h3>実測した1回の受け渡しの所要時間（メッセージ保存から相手の完了まで）</h3>
 <table>
 <tr><th>経路</th><th>1回目</th><th>2回目</th><th>3回目</th><th>主な時間の使い道</th></tr>
-<tr><td>dots ↔ Grok（2026-10-03）</td><td>17秒</td><td>46秒</td><td>21秒</td><td>相手のAIの起動と推論。Anybots側はおおむね1秒以内（workerの問い合わせ待ちの最大1秒を含む）</td></tr>
+<tr><td>dots ↔ Grok（2026-10-03）</td><td>17秒</td><td>46秒</td><td>21秒</td><td>相手のAIの起動と推論。knotcat側はおおむね1秒以内（workerの問い合わせ待ちの最大1秒を含む）</td></tr>
 <tr><td>Muse ↔ Grok（2026-10-04）</td><td>26秒</td><td>15秒</td><td>24秒</td><td>Grokの起動と推論。Museは実行中に返信を確認していた</td></tr>
 </table>
-<p class="note">つまり、遅さの大部分は「止まっているAIを毎回起こしていること」。Anybots自体を速くしても、起こす回数を減らさないとラリーは速くならない。</p>
+<p class="note">つまり、遅さの大部分は「止まっているAIを毎回起こしていること」。knotcat自体を速くしても、起こす回数を減らさないとラリーは速くならない。</p>
 
 <h3>実装上のボトルネックと無駄</h3>
 <table>
@@ -137,9 +137,9 @@ Muse：合図なし。実行中に5秒以上の間隔で inbox_claim を繰り�
 <h2 id="transport">2. 接続方式の比較</h2>
 <table>
 <tr><th>方式</th><th>強み</th><th>弱み</th><th>判定</th></tr>
-<tr><td><b>MCPでの中継</b>（現行）</td><td>ChatGPT・Grok・Muse・Claude・Pokeがみな「MCPを使う側」として対応している。今すぐ一般向けAIに届く唯一の共通の道</td><td>Anybotsが中継に入る。起こす仕組みは各社でバラバラ（MCP Events・Webhook・なし）</td><td><span class="tag dark">一般向けAIの主経路</span></td></tr>
+<tr><td><b>MCPでの中継</b>（現行）</td><td>ChatGPT・Grok・Muse・Claude・Pokeがみな「MCPを使う側」として対応している。今すぐ一般向けAIに届く唯一の共通の道</td><td>knotcatが中継に入る。起こす仕組みは各社でバラバラ（MCP Events・Webhook・なし）</td><td><span class="tag dark">一般向けAIの主経路</span></td></tr>
 <tr><td><b>A2A v1.0</b>（Linux Foundation）</td><td>名刺（Agent Card）・署名による身元確認・仕事の状態管理・ストリーミング・通知の受け口が標準化済み。主要クラウドが対応している</td><td>相手がA2Aの受け口を持つ必要がある。一般向けAIは持っていない。人と人の関係や同意の仕組みは範囲外</td><td><span class="tag dark">業務用・自作AIとの経路、外部への公開</span></td></tr>
-<tr><td><b>直接通信（P2P）</b></td><td>中継の遅延と費用がない</td><td>一般向けAIは受け口を開けない。記録・停止・取り消しを保証できない</td><td><span class="tag">将来：A2A同士で、許可の証明だけAnybotsが出す</span></td></tr>
+<tr><td><b>直接通信（P2P）</b></td><td>中継の遅延と費用がない</td><td>一般向けAIは受け口を開けない。記録・停止・取り消しを保証できない</td><td><span class="tag">将来：A2A同士で、許可の証明だけknotcatが出す</span></td></tr>
 <tr><td><b>Webhookで起こす</b>（dots・Grok）</td><td>止まっているAIを起こせる</td><td>起動に15〜46秒かかる。各社の非公開仕様に依存する</td><td><span class="tag dark">止まっている相手には必須</span></td></tr>
 <tr><td><b>短い間隔での確認</b>（Muse）</td><td>何の仕組みもなく動く</td><td>確認のたびにAIの1手。遅くて高い</td><td><span class="tag">次の「待ち受け」に置き換える</span></td></tr>
 <tr><td><b>待ち受け</b>（来るまで応答を保留する）</td><td>1回の呼び出しで「次のメッセージが来たら即座に返る」。確認の繰り返しが不要</td><td>各社のツール呼び出しの制限時間に縛られる（未検証）</td><td><span class="tag dark">動いているAI同士のラリーの主経路</span></td></tr>
@@ -154,8 +154,8 @@ Muse：合図なし。実行中に5秒以上の間隔で inbox_claim を繰り�
 <tr><td>起こせるAI ↔ 起こせるAI</td><td>dots ↔ Grok</td><td>MCP Events / Webhookで起こす</td><td>待ち受けと「返信して次を待つ」</td><td>許可の範囲外の依頼が来たときだけ</td></tr>
 <tr><td>起こせるAI ↔ 起こせないAI</td><td>Grok ↔ Muse、私のPoke ↔ ママの一般向けChatGPT</td><td>起こせない側は受信箱に保管し、<b>持ち主の人へお知らせ</b>（プッシュ通知・メール）。予約実行に対応していればそれも使う</td><td>起こせない側の実行中は待ち受け</td><td>「ママがChatGPTを開く」ことが起動のきっかけになる。正直に表示する</td></tr>
 <tr><td>起こせないAI ↔ 起こせないAI</td><td>Claudeのチャット ↔ 一般向けChatGPT</td><td>両方とも保管と人へのお知らせ</td><td>両方が開いている間だけ待ち受け</td><td>完全な自動化は各社が起こす仕組みを出すまで不可能</td></tr>
-<tr><td>一般向けAI ↔ A2AのAI</td><td>私のPoke ↔ お店の予約AI</td><td>AnybotsがA2Aで <code>SendMessage</code> を送る</td><td>短い仕事は<b>1回のツール呼び出しの中で答えまで待つ</b>（A2Aのストリーミング）。長い仕事は受信箱へ</td><td>支払いなど「実行」の段階は毎回確認</td></tr>
-<tr><td>A2AのAI ↔ A2AのAI</td><td>会社の業務AI同士</td><td colspan="2">A2Aで直接やりとりし、Anybotsは許可の証明（期限付き署名トークン）と記録の受け取りだけ。記録を必須にするなら中継に入る</td><td>方針しだい</td></tr>
+<tr><td>一般向けAI ↔ A2AのAI</td><td>私のPoke ↔ お店の予約AI</td><td>knotcatがA2Aで <code>SendMessage</code> を送る</td><td>短い仕事は<b>1回のツール呼び出しの中で答えまで待つ</b>（A2Aのストリーミング）。長い仕事は受信箱へ</td><td>支払いなど「実行」の段階は毎回確認</td></tr>
+<tr><td>A2AのAI ↔ A2AのAI</td><td>会社の業務AI同士</td><td colspan="2">A2Aで直接やりとりし、knotcatは許可の証明（期限付き署名トークン）と記録の受け取りだけ。記録を必須にするなら中継に入る</td><td>方針しだい</td></tr>
 <tr><td>同じ会社のAI同士</td><td>dots ↔ dots</td><td colspan="2">同じ中継でよい。その会社のネイティブ機能が出たら比較する</td><td>同上</td></tr>
 </table>
 
@@ -163,7 +163,7 @@ Muse：合図なし。実行中に5秒以上の間隔で inbox_claim を繰り�
 <h3>目標の時間</h3>
 <table>
 <tr><th>区間</th><th>今</th><th>目標</th><th>手段</th></tr>
-<tr><td>Anybots内（保存から相手に届くまで）</td><td>最大1秒強＋ロック待ち（最悪10秒）</td><td><b>50ms以下（中央値）</b></td><td>保存した直後にその場で配送。全体ロックは廃止</td></tr>
+<tr><td>knotcat内（保存から相手に届くまで）</td><td>最大1秒強＋ロック待ち（最悪10秒）</td><td><b>50ms以下（中央値）</b></td><td>保存した直後にその場で配送。全体ロックは廃止</td></tr>
 <tr><td>動いているAI同士の1回の受け渡し</td><td>2回の呼び出し、Museは5秒の確認</td><td><b>AIが考える時間だけ</b>（1回の呼び出し）</td><td>「返信して次を待つ」</td></tr>
 <tr><td>止まっているAIを起こす</td><td>15〜46秒</td><td>相手の会社しだい（短縮は不可）</td><td>起こす回数を減らす：まとめて処理、構造化した依頼、ラリー中は起こしたまま</td></tr>
 </table>
@@ -200,13 +200,13 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <tr><td>空のときのDB問い合わせ</td><td>1日約86,400回</td><td>見回りの1日約2,880回だけ</td></tr>
 <tr><td>Museの確認</td><td>5秒ごとにAIの1手</td><td>メッセージ1件につき1回の待ち受け</td></tr>
 <tr><td>1回の受け渡しの呼び出し</td><td>2回</td><td>1回</td></tr>
-<tr><td>一番大きい費用</td><td colspan="2">受け取る側のAIを起こすたびの推論の利用料（各利用者の契約の枠を使う）。起こす回数と往復の回数を減らすのが最も効く。Anybots自体の費用は小さい</td></tr>
+<tr><td>一番大きい費用</td><td colspan="2">受け取る側のAIを起こすたびの推論の利用料（各利用者の契約の枠を使う）。起こす回数と往復の回数を減らすのが最も効く。knotcat自体の費用は小さい</td></tr>
 </table>
 <p class="note">Renderの通信料などは別料金で、月額の上限は保証されていない（<a href="render-deployment.md">運用記録</a>のとおり）。</p>
 
 <h2 id="product">6. プロダクトの姿</h2>
 <h3>立ち位置</h3>
-<p>誰もが自分のAIを持ち、AIが代わりに連絡・調整する社会では、「誰のAIに」「どこまで許して」「何が起きたか」を<b>会社をまたいで中立に</b>管理する層が必要になる。AI同士の通信方式はMCPとA2Aで標準化されていく。でも<b>人と人の信頼関係と許可</b>は、どのAI会社も中立にはやれない。Anybotsはそこを取る。AIアシスタントそのものとは競争しない。</p>
+<p>誰もが自分のAIを持ち、AIが代わりに連絡・調整する社会では、「誰のAIに」「どこまで許して」「何が起きたか」を<b>会社をまたいで中立に</b>管理する層が必要になる。AI同士の通信方式はMCPとA2Aで標準化されていく。でも<b>人と人の信頼関係と許可</b>は、どのAI会社も中立にはやれない。knotcatはそこを取る。AIアシスタントそのものとは競争しない。</p>
 
 <h3>中心になる考え方</h3>
 <table>
@@ -223,7 +223,7 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <ol>
   <li><b>登録</b>：パスキーでログイン →「Add agent」→ Pokeを選ぶ → 接続の認証 → 接続テストが成功すると表示が「Connected」になる。</li>
   <li><b>招待</b>：「Invite family」→ リンクかQRコードをLINEやSMSで送る。</li>
-  <li><b>ママの登録</b>：リンクからログイン →「Add ChatGPT」→ ChatGPTのアプリ一覧からAnybotsを追加する（<a href="#unverified">未検証</a>）。</li>
+  <li><b>ママの登録</b>：リンクからログイン →「Add ChatGPT」→ ChatGPTのアプリ一覧からknotcatを追加する（<a href="#unverified">未検証</a>）。</li>
   <li><b>許可の合意</b>：テンプレートを選ぶ（例：家族＝質問と予定調整は自動、実行と個人情報は毎回確認、22時〜7時は送らない）。両方が同じ条件を承認すると、Linkが有効になる。</li>
   <li><b>使う</b>：Pokeに「ママに日曜空いてるか聞いて」→ 許可を確認して届ける → ママのAIが受け取る。止まっていればママへお知らせ → 返事 → Pokeが私に伝える。</li>
   <li><b>管理する</b>：承認待ちの箱、Linkの一時停止と取り消し、タイムラインの確認と書き出し。</li>
@@ -287,13 +287,13 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <div class="card"><h4>許可</h4><p>段階は「質問・調整・実行」の3つで、それぞれ「自動・毎回確認・禁止」から選ぶ。初期値は関係ごとのテンプレートで決める。AIの画面の中での「はい」は許可とみなさない。人が自分の端末で承認した記録を残す（IETFのAI委任の草案と同じ考え方）。相手のAIの文章は命令ではなくデータとして扱う。</p></div>
 <div class="card"><h4>追跡</h4><p>状態は「送信 → 配達 → 既読 → 回答／承認待ち／拒否／期限切れ」。両方の持ち主が同じ記録を見られる。「相手のAIが終わったと言った」ことと「実際に終わった」ことは分けて表示する。後で改ざんを検出できる形（ハッシュの連鎖）にする。</p></div>
 <div class="card"><h4>停止</h4><p>Linkの一時停止・取り消し・Agentの切断は、どれもすぐ効く。すでに相手へ渡った本文や、相手が始めた操作は取り消せないことを画面で正直に示す。</p></div>
-<div class="card"><h4>身元</h4><p>Agentごとに、Anybotsが署名したA2Aの名刺（Agent Card）を発行する。どの人の、どのAIかを相手に証明する。将来は本人確認の段階（電話番号、身分証）を選べるようにする。</p></div>
+<div class="card"><h4>身元</h4><p>Agentごとに、knotcatが署名したA2Aの名刺（Agent Card）を発行する。どの人の、どのAIかを相手に証明する。将来は本人確認の段階（電話番号、身分証）を選べるようにする。</p></div>
 </div>
 
 <h2 id="strategy">9. 勝ち筋（ユニコーン・デカコーン）</h2>
 <table>
 <tr><th>参考</th><th>学ぶこと</th></tr>
-<tr><td>Instinct（2026年9月、評価額100億ドル）</td><td>「友達のAI同士で予定を合わせる」需要はある。ただし自社のAIだけで閉じている → Anybotsは会社をまたぐ</td></tr>
+<tr><td>Instinct（2026年9月、評価額100億ドル）</td><td>「友達のAI同士で予定を合わせる」需要はある。ただし自社のAIだけで閉じている → knotcatは会社をまたぐ</td></tr>
 <tr><td>Plaid・Twilio・Stripe Connect</td><td>バラバラな相手をつなぐ中立の層は、標準になれば巨大になる</td></tr>
 <tr><td>Calendly・Venmo・WhatsApp</td><td>使うたびに相手を招くので、自然に広がる</td></tr>
 <tr><td>Composio・Supermemory・Browser Use</td><td>接続を1行で管理する画面、ホスト型の認証リンク、何が起きたか全部たどれる記録</td></tr>
@@ -361,7 +361,7 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <p class="lead">結論：<b>土台の方針（制御面を1つ、データ面は相手に合わせる）は変えない。</b>最速でMVPを出すために足りないのは、新しい通信方式ではなく、①外向けの入口（LP）、②AIが「誰と話しているか」を分かること、③v0.2.0での実アカウントの往復の再確認、の3つ。</p>
 <h3>標準</h3>
 <table>
-<tr><th>対象</th><th>2026-10時点の状況</th><th>Anybotsの判断</th></tr>
+<tr><th>対象</th><th>2026-10時点の状況</th><th>knotcatの判断</th></tr>
 <tr><td><a href="https://a2a-protocol.org/latest/specification/">A2A v1.0</a></td><td>Linux Foundationで150以上の組織が支持。Agent CardのJWS署名（RFC 8785で正規化）、<code>supportedInterfaces</code>、Device Code・PKCE、マルチテナント</td><td>一般向けAIは今もA2Aの受け口を持たないので、主経路はMCPのまま。A2Aの入口は段階5。Agent Cardを公開すると「誰がどのAIを使っているか」が漏れるため、公開カードには個人を載せず、つながった相手だけに拡張カードを見せる</td></tr>
 <tr><td><a href="https://tasks.extensions.modelcontextprotocol.io/">MCP 2026-07-28とTasks拡張</a></td><td>ツール呼び出しに長時間の仕事の識別子を返し、<code>input_required</code> で途中の入力を求められる</td><td>承認待ち（<code>approval='pending'</code>）と同じ形。ChatGPT・Grokが対応したと確認できてから載せる（未検証）。今は <code>wait_s</code> の待ち受けで足りる</td></tr>
 </table>
@@ -369,7 +369,7 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <p>LangGraph・CrewAI・AutoGen・OpenAI Agents SDK・Google ADKは、<b>1人の持ち主の中で</b>複数のAIを動かす仕組み。持ち主をまたぐ同意と取り消しは範囲外。<a href="https://arxiv.org/abs/2609.00267">2026年9月の研究</a>では、このうち3つに権限の閉じ込めが組み込まれていなかった。競合ではなく、将来A2Aでつながる相手として扱う。</p>
 <h3>競合と近いプロダクト</h3>
 <table>
-<tr><th>名前</th><th>やっていること</th><th>Anybotsとの差</th></tr>
+<tr><th>名前</th><th>やっていること</th><th>knotcatとの差</th></tr>
 <tr><td>Instinct（評価額100億ドル）</td><td>「信頼できる人のネットワーク」で、友達のInstinct同士が予定を合わせる</td><td>自社のAIだけで閉じている</td></tr>
 <tr><td>Pickle（iPhone、月$8.99）</td><td>友達のPickle同士が会話し、持ち主を紹介する。共有範囲は持ち主が決める</td><td>自社のAIだけ。利用者は今使っているAIを持ち込めない</td></tr>
 <tr><td>shapes.inc（月間40万人）、Teamily（調達2,000万ドル）</td><td>人とAIのグループチャット</td><td>自社アプリの中のAIだけ</td></tr>
@@ -379,9 +379,9 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <p class="note">共通点：資金も利用者も「AI同士が人の代わりに調整する」に集まっている。どれも自社のAIか同じ持ち主の中で閉じている。<b>「今使っている違う会社のAIを持ち込み、持ち主どうしが許した範囲だけでつなぐ」は空いている。</b>LPの主張はここに絞る。</p>
 <h3>研究</h3>
 <ul>
-  <li><a href="https://arxiv.org/abs/2609.00267">Delegation Without Trust</a>：「AIが完全に乗っ取られても、委ねられた権限を超えられない」ことを正しさの基準にする。判定はAIの外で行う。Anybotsの方針判定は中継側で行うので、この基準に沿っている。intentは送る側の自己申告で、この点は残余リスクとして既に記録している。</li>
-  <li><a href="https://arxiv.org/abs/2609.22949">マルチエージェントのプロンプトインジェクション</a>：送り主の出どころを付ける（署名と追跡）と、AI間のインジェクションが91%減った。Anybotsでは、受け取ったメッセージに中継側が確認した送り主（Agent名と持ち主名）を付ける。本文の中の自称は信用しない。同じ研究の「書式のなりすまし」（システムの指示に見える文字列）に備えて、名前では改行や見えない書式文字を拒否する。</li>
-  <li><a href="https://github.com/usedhonda/dots-device">ESP32とMCP Events・Secure MCP Tunnelの事例</a>：通知は合図だけにして、状態は認証済みのツールで取り直す。HTTPの2xxを「処理済み」と扱わない。予約と結果を別に記録し、再試行を再生と区別する。どれもAnybotsのデータ面と同じ考え方。Tunnelは社内のMCPサーバーをOpenAIの経路で外に出す仕組みで、データはOpenAIを通る。AnybotsにつなぐAIは中継へ外向きに接続するので、Tunnelは使わない。</li>
+  <li><a href="https://arxiv.org/abs/2609.00267">Delegation Without Trust</a>：「AIが完全に乗っ取られても、委ねられた権限を超えられない」ことを正しさの基準にする。判定はAIの外で行う。knotcatの方針判定は中継側で行うので、この基準に沿っている。intentは送る側の自己申告で、この点は残余リスクとして既に記録している。</li>
+  <li><a href="https://arxiv.org/abs/2609.22949">マルチエージェントのプロンプトインジェクション</a>：送り主の出どころを付ける（署名と追跡）と、AI間のインジェクションが91%減った。knotcatでは、受け取ったメッセージに中継側が確認した送り主（Agent名と持ち主名）を付ける。本文の中の自称は信用しない。同じ研究の「書式のなりすまし」（システムの指示に見える文字列）に備えて、名前では改行や見えない書式文字を拒否する。</li>
+  <li><a href="https://github.com/usedhonda/dots-device">ESP32とMCP Events・Secure MCP Tunnelの事例</a>：通知は合図だけにして、状態は認証済みのツールで取り直す。HTTPの2xxを「処理済み」と扱わない。予約と結果を別に記録し、再試行を再生と区別する。どれもknotcatのデータ面と同じ考え方。Tunnelは社内のMCPサーバーをOpenAIの経路で外に出す仕組みで、データはOpenAIを通る。knotcatにつなぐAIは中継へ外向きに接続するので、Tunnelは使わない。</li>
   <li><a href="https://www.ietf.org/archive/id/draft-asor-wimse-agent-delegation-chain-00.html">IETFの委任チェーンの草案</a>：A2Aで外部へ委ねるとき（段階5）の権限の縮小に使う候補。</li>
 </ul>
 <h3>MVPに足りないもの（優先順）</h3>
@@ -398,7 +398,7 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <p class="note">判定：1・2・3が揃えば、<b>招待制のベータとして最速で出せる</b>。一般公開（自己登録、課金、複数台構成）はMVPに入れない。</p>
 
 <h2 id="easy-connect">10.6 かんたん接続：URLを貼ってパスキーで許可するだけ（2026-10-05）</h2>
-<p class="lead">結論：<b>接続コードと戻り先の許可リストをやめ、「AIのアプリにURLを貼る → Anybotsにパスキーでログイン → Connectを押す」だけにする。</b>Agentは許可したときに作られる。開発者向けの操作（コードの書き写し、ヘッダー、運営への連絡）を初回の導線から外す。</p>
+<p class="lead">結論：<b>接続コードと戻り先の許可リストをやめ、「AIのアプリにURLを貼る → knotcatにパスキーでログイン → Connectを押す」だけにする。</b>Agentは許可したときに作られる。開発者向けの操作（コードの書き写し、ヘッダー、運営への連絡）を初回の導線から外す。</p>
 <h3>他のプロダクトはどうしているか</h3>
 <table>
 <tr><th>プロダクト</th><th>利用者がすること</th><th>出典（2026-10-05確認）</th></tr>
@@ -407,7 +407,7 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <tr><td>Grok</td><td>grok.com/connectors → New Connector → Custom にURLを貼り、ログインする</td><td><a href="https://docs.x.ai/grok/connectors">xAI Docs</a></td></tr>
 <tr><td>ChatGPT</td><td>開発者モードなしで使うには、OpenAIの審査を通ってディレクトリに載る必要がある。載れば「Connect」を押してログインするだけ。Business・Enterpriseは管理者がワークスペースに公開できる</td><td><a href="https://developers.openai.com/apps-sdk/deploy/submission">Apps SDK</a>、<a href="https://help.openai.com/en/articles/12584461">OpenAI Help</a></td></tr>
 </table>
-<p>共通点は、<b>MCPのOAuth（DCR＋PKCE）に正しく対応したサーバーなら、アプリ側は「URLを貼ってログイン」だけで済む</b>こと。今のAnybotsは、戻り先を最大4件の完全一致に限り、さらに「先にWebでAgentを作って接続コードを書き写す」手順を挟んでいたので、Pokeのようにはならなかった。</p>
+<p>共通点は、<b>MCPのOAuth（DCR＋PKCE）に正しく対応したサーバーなら、アプリ側は「URLを貼ってログイン」だけで済む</b>こと。今のknotcatは、戻り先を最大4件の完全一致に限り、さらに「先にWebでAgentを作って接続コードを書き写す」手順を挟んでいたので、Pokeのようにはならなかった。</p>
 <h3>変えること</h3>
 <ul>
   <li><b>許可画面をWebアプリに出す</b>：OAuthの入口は、検証した要求を保存してから <code>/app</code> の許可画面へ移る。未ログインならパスキーでログイン（招待で登録）してから同じ画面に戻る。</li>
@@ -426,8 +426,8 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <h2 id="unverified">11. 未検証の前提（検証するまで完成とは言わない）</h2>
 <table>
 <tr><th>#</th><th>前提</th><th>なぜ重要か</th><th>確かめ方</th></tr>
-<tr><td>①</td><td>一般向けChatGPT（Plus）から、書き込みのあるAnybotsのツールを使えるか</td><td>開発者モードなしで使うには、ディレクトリへの申請と審査が必要（<a href="#easy-connect">10.6</a>）</td><td>運営が申請し、審査後にPlusのアカウントで「Connect」から試す</td></tr>
-<tr><td>②</td><td>PokeがAnybotsを接続先として使えるか、外から起こせるか</td><td>MVPの片方の主役</td><td>Pokeの統合機能（Poke Kitchen・カスタム統合）とAPIを試す</td></tr>
+<tr><td>①</td><td>一般向けChatGPT（Plus）から、書き込みのあるknotcatのツールを使えるか</td><td>開発者モードなしで使うには、ディレクトリへの申請と審査が必要（<a href="#easy-connect">10.6</a>）</td><td>運営が申請し、審査後にPlusのアカウントで「Connect」から試す</td></tr>
+<tr><td>②</td><td>Pokeがknotcatを接続先として使えるか、外から起こせるか</td><td>MVPの片方の主役</td><td>Pokeの統合機能（Poke Kitchen・カスタム統合）とAPIを試す</td></tr>
 <tr><td>③</td><td>各社のツール呼び出しの制限時間と、途中経過の通知で延長できるか</td><td>待ち受けの最大時間を決める</td><td>dots・Grok・Muse・Claudeで、保留する試験用ツールを計測する</td></tr>
 <tr><td>④</td><td>止まっているMuse・Claudeを起こす手段（予約実行など）</td><td>起こせない組み合わせの体験を決める</td><td>公式機能を調べて実際に試す</td></tr>
 <tr><td>⑤</td><td>接続先の地域と往復時間</td><td>Renderの地域の判断</td><td>実際の呼び出し元のIPと所要時間を記録する</td></tr>

@@ -45,7 +45,7 @@ LPから「Guide」でたどる静的なページ。LPと同じCSPとヘッダ�
 
 ## セッション
 
-- Cookie名：HTTPSでは `__Host-anybots_session`（`Secure; HttpOnly; SameSite=Lax; Path=/`）
+- Cookie名：HTTPSでは `__Host-knotcat_session`（`Secure; HttpOnly; SameSite=Lax; Path=/`）
 - 値は32バイトの乱数。DBにはSHA-256だけを保存する。クライアントが示したIDは受け付けず、ログインのたびに新しく発行する（セッション固定の防止）。
 - 期限：操作がなければ24時間、最長14日。ログアウトするとDB側で失効する。
 - **状態を変える要求の条件**：

@@ -1,4 +1,4 @@
-# Anybots
+# knotcat
 
 A relay for conversations between existing personal agents. The first milestone connects OpenAI dots and Grok Bot. Provider acceptance, agent replies, and completed work are tracked separately.
 
@@ -15,7 +15,7 @@ Requires Node.js 24 LTS and Docker, or an existing PostgreSQL 18 database.
 ```sh
 npm ci
 npm run db:dev
-export DATABASE_URL=postgres://anybots:local-development-only@127.0.0.1:55432/anybots
+export DATABASE_URL=postgres://knotcat:local-development-only@127.0.0.1:55432/knotcat
 npm run db:migrate
 npm run check
 ```
@@ -66,11 +66,11 @@ The reusable [web-security-review skill](.agents/skills/web-security-review/SKIL
 ## Container
 
 ```sh
-docker build -t anybots:local .
+docker build -t knotcat:local .
 # Inject production configuration using the hosting provider's secret store.
 # Run migrations once before starting:
-docker run --rm --env-file /private/path/anybots.env anybots:local node dist/migrate.js
-docker run --rm --env-file /private/path/anybots.env -p 127.0.0.1:3000:3000 anybots:local
+docker run --rm --env-file /private/path/knotcat.env knotcat:local node dist/migrate.js
+docker run --rm --env-file /private/path/knotcat.env -p 127.0.0.1:3000:3000 knotcat:local
 ```
 
 See the [Render deployment record](docs/render-deployment.md) for launch configuration and verified deployment status. Configure [OAuth](docs/oauth.md) and connect real owners' integrations before recording account-backed success.

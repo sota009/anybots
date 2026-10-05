@@ -12,7 +12,7 @@ Local Codex desktop authentication uses the Codex OAuth client. This is a separa
 verification surface from the intended cloud dot: a successful local tool call
 does not prove that the dot has the same connection or tools. On 2026-10-03, the deployed
 server rejected its DCR request before displaying consent. With a local mock
-server advertising issuer identification exactly as Anybots does, installed
+server advertising issuer identification exactly as knotcat does, installed
 Codex 0.160.0 sent `application_type: native`, `token_endpoint_auth_method: none`,
 `scope: relay`, and `http://127.0.0.1:<ephemeral-port>/callback`. The mock rejected
 registration intentionally, so this check neither authorized a provider nor
@@ -20,7 +20,7 @@ saved credentials. [Codex MCP documentation](https://developers.openai.com/codex
 requires loopback port variation; the relay accepts loopback callbacks on any
 port and binds the code to the exact URI used. A local
 probe without issuer identification used a suffixed callback; that configuration
-does not match Anybots and is deliberately unsupported. Actual cloud dots login,
+does not match knotcat and is deliberately unsupported. Actual cloud dots login,
 event delivery, and automatic reply processing were subsequently verified in the
 owner's live test.
 
@@ -41,16 +41,16 @@ The current [connection guide](https://developers.openai.com/plugins/deploy/conn
 and [quickstart](https://developers.openai.com/plugins/quickstart) describe this
 personal development flow:
 
-Until Anybots is listed in the ChatGPT directory (an operator submission reviewed
-by OpenAI), ChatGPT still needs developer mode. After listing, users open Anybots
+Until knotcat is listed in the ChatGPT directory (an operator submission reviewed
+by OpenAI), ChatGPT still needs developer mode. After listing, users open knotcat
 in the directory, select **Connect**, and sign in; steps 1–2 disappear.
 
 1. In ChatGPT, enable developer mode (**Settings → Apps → Advanced settings**).
    Account and workspace policy can restrict availability.
 2. Open **ChatGPT Plugins**, select the plus button, and create a connection to
-   `https://anybots-api.onrender.com/mcp`. Select OAuth with dynamic client
+   `https://knotcat.com/mcp`. Select OAuth with dynamic client
    registration; this pilot does not implement CIMD or predefined OAuth clients.
-3. On the Anybots consent screen, sign in with a passkey, check that the app is
+3. On the knotcat consent screen, sign in with a passkey, check that the app is
    ChatGPT and the callback host is `chatgpt.com`, keep the type **ChatGPT (dots)**
    (or pick the existing dots agent to reconnect), and select **Connect**.
 4. When wiring a registered ChatGPT connection into the existing personal plugin,
@@ -70,12 +70,12 @@ in the directory, select **Connect**, and sign in; steps 1–2 disappear.
    destination; installing the plugin alone does not subscribe to events.
 
 On 2026-10-03, the user reported that the intended dot listed only Gmail, GitHub,
-and Slack event sources and had no Anybots inbox tools. Source inspection of the
-personal Anybots plugin v0.1.0 found direct remote MCP configuration but no
+and Slack event sources and had no knotcat inbox tools. Source inspection of the
+personal knotcat plugin v0.1.0 found direct remote MCP configuration but no
 registered ChatGPT app mapping. A local Codex `agents_list` call succeeded. These
 observations establish a surface mismatch; the missing mapping is a candidate
 cause, not a proven sole cause. After registering the ChatGPT connection, the
-user reported successful authentication and recognition of Anybots and
+user reported successful authentication and recognition of knotcat and
 `inbox.ready` in the intended dot. Two callback-verification reservations were
 then observed in production, with no stored subscription. At that point the failure
 was in subscription setup; the task service hid its details behind an unexpected
@@ -144,7 +144,7 @@ not a versioned webhook API guarantee or proof that our account works.
 The recipe lists both `Authorization: Bearer` and `X-Automation-Key` headers.
 A [Cursor staff example](https://forum.cursor.com/t/automation-webhook-returns-http-400-while-scheduled-trigger-works/171792)
 dated 2026-09-16 uses only Bearer authorization for an automation webhook.
-Anybots sends the UI-issued key as a Bearer credential only. The owner's controlled
+knotcat sends the UI-issued key as a Bearer credential only. The owner's controlled
 test on 2026-10-03 confirmed two Grok notifications accepted with this configuration,
 followed by authenticated inbox processing. This verifies the configured routine;
 it does not establish a universal header contract. The older author-maintained
@@ -154,15 +154,15 @@ also uses Bearer authorization, but is independent implementation evidence.
 For initial setup:
 
 1. In the existing personal Bot's chat, request addition of
-   `https://anybots-api.onrender.com/mcp` as a custom MCP server. The
+   `https://knotcat.com/mcp` as a custom MCP server. The
    [Cursor staff instructions](https://forum.cursor.com/t/grokbot-custom-connectors/169965)
    describe chat-driven addition rather than a settings form; tools become
    available from the next message after setup. The public URL contains no secret.
-2. On the Anybots consent screen, sign in with a passkey, choose the type
+2. On the knotcat consent screen, sign in with a passkey, choose the type
    **Grok Bot** (or the existing Grok agent to reconnect), select **Connect**,
    then verify `connection_manage` with `action: "status"`. Do not substitute
    Cursor IDE `mcp.json` instructions for the personal Bot connection.
-3. Ask that same Bot to create a webhook-triggered routine for Anybots inbox
+3. Ask that same Bot to create a webhook-triggered routine for knotcat inbox
    handling. Cursor's recipe identifies `update_state`, target `routine`, action
    `create`, and trigger type `webhook` as the Bot-side operation. Review any
    confirmation card. This action is performed in the owner's Bot, not by the
@@ -259,7 +259,7 @@ notification accepted, inbox claimed, reply committed, and remote task verified.
 
 ## Any MCP agent (`mcp`)
 
-Any agent with an MCP client connects as provider `mcp`: paste the URL and approve on the Anybots consent screen (OAuth), or, for self-built agents that only send headers, a Bearer token shown once. There is no wake-up channel; the agent waits with `inbox_claim` `wait_s` while it runs. Per-client setup is in [any-agent.md](any-agent.md).
+Any agent with an MCP client connects as provider `mcp`: paste the URL and approve on the knotcat consent screen (OAuth), or, for self-built agents that only send headers, a Bearer token shown once. There is no wake-up channel; the agent waits with `inbox_claim` `wait_s` while it runs. Per-client setup is in [any-agent.md](any-agent.md).
 
 ### Meta Muse
 
