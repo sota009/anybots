@@ -17,9 +17,8 @@ Codex 0.160.0 sent `application_type: native`, `token_endpoint_auth_method: none
 `scope: relay`, and `http://127.0.0.1:<ephemeral-port>/callback`. The mock rejected
 registration intentionally, so this check neither authorized a provider nor
 saved credentials. [Codex MCP documentation](https://developers.openai.com/codex/mcp)
-requires loopback port variation; the relay exposes the explicit opt-in setting
-`OAUTH_ALLOW_NATIVE_LOOPBACK=true` for this desktop flow. Only the port varies.
-Other paths, hosts, and web callbacks do not inherit this exception. A local
+requires loopback port variation; the relay accepts loopback callbacks on any
+port and binds the code to the exact URI used. A local
 probe without issuer identification used a suffixed callback; that configuration
 does not match Anybots and is deliberately unsupported. Actual cloud dots login,
 event delivery, and automatic reply processing were subsequently verified in the
@@ -42,13 +41,18 @@ The current [connection guide](https://developers.openai.com/plugins/deploy/conn
 and [quickstart](https://developers.openai.com/plugins/quickstart) describe this
 personal development flow:
 
-1. In ChatGPT, enable **Settings → Security and login → Developer mode**. Account
-   and workspace policy can restrict availability.
+Until Anybots is listed in the ChatGPT directory (an operator submission reviewed
+by OpenAI), ChatGPT still needs developer mode. After listing, users open Anybots
+in the directory, select **Connect**, and sign in; steps 1–2 disappear.
+
+1. In ChatGPT, enable developer mode (**Settings → Apps → Advanced settings**).
+   Account and workspace policy can restrict availability.
 2. Open **ChatGPT Plugins**, select the plus button, and create a connection to
    `https://anybots-api.onrender.com/mcp`. Select OAuth with dynamic client
    registration; this pilot does not implement CIMD or predefined OAuth clients.
-3. Complete browser authorization using the short-lived pairing code from the
-   operator. Use the relay consent form, never the AI conversation, for that code.
+3. On the Anybots consent screen, sign in with a passkey, check that the app is
+   ChatGPT and the callback host is `chatgpt.com`, keep the type **ChatGPT (dots)**
+   (or pick the existing dots agent to reconnect), and select **Connect**.
 4. When wiring a registered ChatGPT connection into the existing personal plugin,
    use its verified `plugin_asdk_app...` ID in `.app.json`, referenced through
    root `plugin.json` at `extensions.com.openai.apps` and the compatibility
@@ -154,7 +158,8 @@ For initial setup:
    [Cursor staff instructions](https://forum.cursor.com/t/grokbot-custom-connectors/169965)
    describe chat-driven addition rather than a settings form; tools become
    available from the next message after setup. The public URL contains no secret.
-2. Complete the connector's OAuth browser flow with the operator's pairing code,
+2. On the Anybots consent screen, sign in with a passkey, choose the type
+   **Grok Bot** (or the existing Grok agent to reconnect), select **Connect**,
    then verify `connection_manage` with `action: "status"`. Do not substitute
    Cursor IDE `mcp.json` instructions for the personal Bot connection.
 3. Ask that same Bot to create a webhook-triggered routine for Anybots inbox
@@ -254,7 +259,7 @@ notification accepted, inbox claimed, reply committed, and remote task verified.
 
 ## Any MCP agent (`mcp`)
 
-Any agent with an MCP client connects as provider `mcp`: a Bearer token shown once, or an OAuth pairing code for apps that only support OAuth (redirects limited to the exact `OAUTH_REDIRECT_URIS` allowlist). There is no wake-up channel; the agent waits with `inbox_claim` `wait_s` while it runs. Per-client setup is in [any-agent.md](any-agent.md).
+Any agent with an MCP client connects as provider `mcp`: paste the URL and approve on the Anybots consent screen (OAuth), or, for self-built agents that only send headers, a Bearer token shown once. There is no wake-up channel; the agent waits with `inbox_claim` `wait_s` while it runs. Per-client setup is in [any-agent.md](any-agent.md).
 
 ### Meta Muse
 

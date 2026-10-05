@@ -1,151 +1,105 @@
-# OAuth pilot connection
+# OAuth connection
 
-The relay implements a bounded OAuth authorization server for the first dots and
-Grok Bot pilot. It does not verify a real provider connection by itself. A local
-OAuth test proves our authorization and token handling; the actual client still
-has to complete onboarding and consume a notification from its existing agent.
+Any app with an MCP client that supports OAuth (Claude, Grok, Poke, ChatGPT,
+Cursor, Codex, Claude Code, VS Code, …) connects by pasting
+`https://anybots-api.onrender.com/mcp`. The owner then signs in to Anybots with a
+passkey and selects **Connect**. No pairing code, header, or operator step is
+needed. A local OAuth test proves our authorization and token handling; each real
+app still needs its own round-trip check.
 
 ## Operator configuration
 
-Use the public HTTPS origin, without a path, as the issuer. The protected resource
-is exactly that origin followed by `/mcp`. The same issuer is returned in OAuth
-authorization responses to prevent authorization-server mix-ups.
+Use the public HTTPS origin, without a path, as the issuer. It must equal
+`APP_ORIGIN`, because consent happens in the web app on the same origin. The
+protected resource is exactly that origin followed by `/mcp`. The same issuer is
+returned in OAuth authorization responses to prevent authorization-server mix-ups.
 
 ```sh
 export OAUTH_ISSUER='https://relay.example.com'
+export APP_ORIGIN='https://relay.example.com'
 export ALLOWED_HOSTS='relay.example.com'
-export OAUTH_REDIRECT_URIS='["https://chatgpt.com/connector_platform_oauth_redirect","cursor://anysphere.cursor-mcp/oauth/callback","https://www.cursor.com/agents/mcp/oauth/callback","http://localhost:8787/callback"]'
 npm run db:migrate
 ```
 
-The array is an exact allowlist, with at most four entries. Do not add wildcard
-paths or a callback supplied by an untrusted message. Configure only callbacks
-needed by the actual client. The three Grok-related entries above come from the
-[reported personal-Bot OAuth registration](https://forum.cursor.com/t/grok-bot-custom-mcp-oauth-fails-before-sign-in-redirect-uri-not-allowed/171877).
-The `cursor://` entry is an explicit product-compatibility exception to MCP's
-HTTPS/localhost redirect guidance; it is not evidence of universal MCP compliance.
-
-For a local Codex client, enable `OAUTH_ALLOW_NATIVE_LOOPBACK=true`. This separate
-opt-in accepts only `http://127.0.0.1:<port>/callback`, with an explicit TCP port
-from 1 through 65535. It does not accept `localhost`, other IP addresses, other
-paths, credentials, query strings, fragments, or encoded aliases. The default is
-off; the four exact web callbacks remain unchanged. This is a browser redirect
-to the user's local OAuth listener, not permission for server-side HTTP requests.
-
-[Codex's MCP documentation](https://developers.openai.com/codex/mcp) requires
-variable loopback ports for native OAuth. With issuer identification advertised,
-installed Codex 0.160.0 was locally observed registering `/callback` on an
-ephemeral port. Registration identity excludes that port so reconnecting reuses
-the same client row; the registration response returns the requested URI. Consent
-and authorization codes retain the actual URI, and token exchange must match it
-exactly, including its port. No callback-ID suffix or arbitrary loopback path is
-enabled. This local reproduction does not establish a live dots connection.
-
-[OpenAI's authentication guide](https://developers.openai.com/plugins/build/auth)
-permits the stable ChatGPT callback above when the server advertises and returns
-issuer identification. This server does both. If the connection management page
-shows a callback-specific URL such as `https://chatgpt.com/connector/oauth/{callback_id}`,
-replace the ChatGPT entry with that exact URL. Never allow the placeholder or a
-prefix match. Choose dynamic client registration in the plugin setup; Client ID
-Metadata Documents, OpenID Connect, and enterprise email-domain restrictions are
-not implemented in this pilot.
-
 For an explicitly local test only, `OAUTH_ALLOW_HTTP_LOCALHOST=true` permits an
 HTTP issuer on localhost or a loopback address. The environment adapter refuses
-this exception in production. Keep the existing database configuration and
-notification setup from the main README; OAuth does not configure the Grok
-routine, enable experimental delivery, or supply a dots callback URL.
+this exception in production.
 
-## Connect an existing binding
+## Flow
 
-The owner adds a dots or Grok agent on the **Agents** page of the
-[web app](web-app.md), which shows a short-lived pairing code for that agent
-once. **New pairing code** on the same page reissues it (at most ten per agent
-per hour). Issuing another code for the same agent invalidates the previous one. Codes
-expire after ten minutes and can authorize one connection once.
+1. The app discovers the metadata from the `401` challenge and registers itself
+   with dynamic client registration (public client, PKCE `S256`).
+2. `GET /oauth/authorize` validates the client, the exact registered redirect,
+   resource, scope, state, and PKCE challenge. It stores a pending request for
+   ten minutes, sets an HttpOnly cookie bound to it (`Path=/api/v1/oauth`), and
+   redirects to `/app#connect=<request token>`.
+3. The web app asks the owner to sign in with a passkey if needed (new people
+   still need an invite). It then shows the consent screen: the app name, whether
+   the app is recognized, the exact host that receives the authorization, and the
+   permission.
+4. The owner names a new agent (the app name is the default) and keeps or changes
+   its type (`dots` for `chatgpt.com` callbacks, otherwise `mcp`; `grok` for a
+   Grok Bot running as a Cursor Automation). For a recognized app the owner may
+   instead choose an existing agent to reconnect. The owner then selects
+   **Connect**. `POST /api/v1/oauth/approve` needs the session, the exact
+   `Origin`, the request token, and the matching cookie. It consumes the request,
+   creates the agent if needed, and returns the callback with a two-minute,
+   single-use code, `state`, and `iss`. The browser navigates there.
+5. The app exchanges the code with the PKCE verifier for a fifteen-minute access
+   token and a rotating refresh token.
 
-The owner opens the provider's OAuth connection flow for the relay `/mcp` URL,
-checks the displayed client, exact callback, and `relay` permission, then enters
-the pairing code in the relay's browser form and selects **Connect**. The code
-belongs only in that form. Do not paste it, the persistent development bearer,
-or OAuth tokens into an AI conversation. The form is the temporary setup-page
-exception; normal relay operations stay in the owner's agent.
+**Cancel** sends `error=access_denied` to the same validated callback.
 
-After consent succeeds, the relay returns a separate, non-cacheable HTML page
-that immediately navigates to the exact validated callback. If navigation does
-not happen, select **Return to your agent**. This page contains no pairing code
-or consent form. It uses an escaped meta refresh and link, without JavaScript,
-and sends no referrer. A callback may redirect onward to the provider's login
-page; navigation is no longer part of the consent form submission, whose CSP
-allows only same-origin submissions. Refreshing or resubmitting the old consent
-form cannot authorize again. Restart the provider flow if the authorization
-code's two-minute lifetime has elapsed.
+## Redirects
 
-A pairing code is operator-provisioned identity evidence, not independent login
-or account recovery. The operator must establish the owner, intended agent, and
-runtime scope before issuing it. OAuth authorization does not create peer grants;
-both owners' communication permission still uses the separate operator grant
-step. It also does not prove that one dot or Bot is isolated from other agents
-sharing the same provider credentials.
+Registration accepts only these shapes, and the raw spelling must equal its
+parsed form, so encoded or aliased spellings are rejected:
+
+- `https://` with a DNS host name, no user info, no fragment
+- `http://127.0.0.1:<port>/…`, `http://localhost:<port>/…`, or
+  `http://[::1]:<port>/…` for apps on the owner's device. The registration
+  ignores the port, because native apps pick a free port each time; the code is
+  bound to the actual URI, and token exchange requires it exactly.
+- `cursor://anysphere.cursor-mcp/oauth/callback`
+
+Anything else is refused, including `javascript:`, `data:`, other custom schemes,
+and IP-literal HTTPS hosts. Authorization requires the exact registered redirect.
+
+Recognized apps are listed by callback host in `src/oauth.ts`: Claude
+(`claude.ai`, `claude.com`), ChatGPT (`chatgpt.com`), Grok (`grok.com`, `x.ai`),
+Poke (`poke.com`), Cursor (`cursor.com`, `cursor://`), Perplexity
+(`perplexity.ai`), and VS Code (`vscode.dev`). Loopback callbacks are shown as
+"An app on this device". Any other host is shown as an **unrecognized app**, with
+its host. An unrecognized app can only create a new agent. It cannot take over an
+existing agent that already has links. The `client_name` sent at registration is
+shown only as an unverified label.
 
 ## Contract and limits
 
 - Public clients use authorization code with PKCE `S256` and token authentication
   method `none`. Other grant types and client-secret methods are rejected.
 - Authorization and token requests must carry the exact `/mcp` resource. The
-  single `relay` scope covers this connection's authorized messaging and control
-  tools; it grants no access to another binding or unapproved peer.
+  single `relay` scope covers this connection's messaging and control tools. It
+  grants no access to another binding or to an unlinked peer. Connecting never
+  creates links.
 - Pending consent is bound to the registered client, redirect, resource, scope,
-  state, PKCE challenge, a random form token, and an HttpOnly browser cookie. The
-  form token expires in ten minutes. Five wrong pairing attempts close that form.
+  state, PKCE challenge, a random request token, and an HttpOnly cookie. A
+  request token leaked without the cookie cannot be approved by another browser.
 - Successful authorization returns a single-use code valid for two minutes.
   Access tokens last at most fifteen minutes. Refresh credentials rotate on every
   use, with an absolute thirty-day family lifetime. Reuse revokes the family.
-- Pairing codes, form/cookie tokens, authorization codes, access tokens, and refresh
-  tokens are stored as SHA-256 hashes. Browser pages use no-store, HTML escaping,
-  and CSP `default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`. The consent
-  form uses `Referrer-Policy: same-origin` so Chromium sends a valid Origin on
-  the same-origin consent POST while withholding the referrer from external
-  callbacks. Other OAuth responses use `no-referrer`. Tokens are not included in relay results.
+- Request tokens, cookies, authorization codes, access tokens, and refresh tokens
+  are stored as SHA-256 hashes. OAuth responses use `no-store` and `no-referrer`.
 - Revocation and core relay mutations share the same database ordering lock.
   Token checks include family revocation, scope, resource, expiry, and active
-  binding state. Disabling a binding invalidates its OAuth credentials.
-- Dynamic registration deduplicates the sorted redirect set, excluding only the
-  native callback's port when the opt-in is enabled. The four exact callbacks
-  alone permit fifteen nonempty combinations; adding the one native profile
-  permits thirty-one. All clients, including mixed native/web combinations,
-  share the thirty-two-client registry cap. Changing a
-  client label or native listener port does not allocate a new client.
-- Public operations have global and per-address minute limits. Live storage is
-  bounded to 100 pairing codes, 256 consent requests, 1,000 token families, and
-  50,000 token rows. Expired transient data is removed during OAuth transactions.
-  Exhaustion fails closed; this is not a large public identity service.
+  binding state. Disconnecting an agent invalidates its OAuth credentials.
+- Dynamic registration reuses the client with the same redirect set. Clients
+  that never completed a connection are removed after a day. The registry holds at
+  most 500 clients, 256 pending requests, 1,000 token families, and 50,000 token
+  rows. Public endpoints have per-address (20 per minute) and global (100 per
+  minute) limits. Exhaustion fails closed.
 
-The module uses the installed SDK's protected-resource metadata helper. The SDK's
-server-side authentication API verifies bearer credentials; it is not a complete
-authorization-server implementation. Our database-backed code, consent, rotation,
-and revocation logic is covered by real PostgreSQL tests.
-
-The [MCP authorization security requirements](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations)
-require resource audience validation, PKCE support, short-lived credentials, and
-refresh rotation for public clients. Live-provider compatibility remains a
-separate acceptance test. Grok notification payload behavior is still experimental,
-and passing OAuth alone does not prove a reply or autonomous multi-turn exchange.
-
-## Browser handoff regression (2026-10-03)
-
-A gstack Chromium 145 test with three local HTTP origins reproduced the old
-behavior: consent POST → 303 allowed callback → 302 another login origin was
-blocked by `form-action`, leaving the already-consumed form visible. Direct
-callback navigation succeeded. The new POST 200 handoff reached both the direct
-callback and the additional login origin without console errors. These were
-isolated fixtures, not a real Grok account connection. The production request log
-showed a successful consent followed by a rejected replay and no token exchange;
-the provider's complete redirect chain was not captured.
-
-[MDN form-action](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/form-action)
-documents browser differences for redirects after form submissions.
-[MDN meta http-equiv](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/http-equiv)
-documents refresh navigation. Both were checked through Composio Exa on the date
-above. Do not expand callback or CSP origin allowlists to accommodate an unknown
-provider login chain.
+The [MCP authorization security considerations](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations)
+require resource audience validation, PKCE, short-lived credentials, refresh
+rotation for public clients, and per-client consent for dynamically registered
+clients. Live-provider compatibility remains a separate acceptance test.

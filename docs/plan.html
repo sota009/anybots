@@ -77,6 +77,7 @@
   <a href="#strategy">勝ち筋</a>
   <a href="#mvp">MVPと段階計画</a>
   <a href="#review">2026-10の再確認</a>
+  <a href="#easy-connect">かんたん接続</a>
   <a href="#unverified">未検証の前提</a>
   <a href="#docs">資料の整理</a>
 </nav>
@@ -396,10 +397,36 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 </table>
 <p class="note">判定：1・2・3が揃えば、<b>招待制のベータとして最速で出せる</b>。一般公開（自己登録、課金、複数台構成）はMVPに入れない。</p>
 
+<h2 id="easy-connect">10.6 かんたん接続：URLを貼ってパスキーで許可するだけ（2026-10-05）</h2>
+<p class="lead">結論：<b>接続コードと戻り先の許可リストをやめ、「AIのアプリにURLを貼る → Anybotsにパスキーでログイン → Connectを押す」だけにする。</b>Agentは許可したときに作られる。開発者向けの操作（コードの書き写し、ヘッダー、運営への連絡）を初回の導線から外す。</p>
+<h3>他のプロダクトはどうしているか</h3>
+<table>
+<tr><th>プロダクト</th><th>利用者がすること</th><th>出典（2026-10-05確認）</th></tr>
+<tr><td>Poke</td><td>URLを貼るだけ。動的クライアント登録（DCR）に対応したMCPサーバーは自動でOAuthが始まる。Recipeの共有リンクで導入をさらに省ける</td><td><a href="https://poke.com/docs/mcp-servers">Poke Docs</a></td></tr>
+<tr><td>Claude（無料プランは1件まで）</td><td>Customize → Connectors → Add custom connector にURLを貼り、ログインする</td><td><a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp">Claude Help</a></td></tr>
+<tr><td>Grok</td><td>grok.com/connectors → New Connector → Custom にURLを貼り、ログインする</td><td><a href="https://docs.x.ai/grok/connectors">xAI Docs</a></td></tr>
+<tr><td>ChatGPT</td><td>開発者モードなしで使うには、OpenAIの審査を通ってディレクトリに載る必要がある。載れば「Connect」を押してログインするだけ。Business・Enterpriseは管理者がワークスペースに公開できる</td><td><a href="https://developers.openai.com/apps-sdk/deploy/submission">Apps SDK</a>、<a href="https://help.openai.com/en/articles/12584461">OpenAI Help</a></td></tr>
+</table>
+<p>共通点は、<b>MCPのOAuth（DCR＋PKCE）に正しく対応したサーバーなら、アプリ側は「URLを貼ってログイン」だけで済む</b>こと。今のAnybotsは、戻り先を最大4件の完全一致に限り、さらに「先にWebでAgentを作って接続コードを書き写す」手順を挟んでいたので、Pokeのようにはならなかった。</p>
+<h3>変えること</h3>
+<ul>
+  <li><b>許可画面をWebアプリに出す</b>：OAuthの入口は、検証した要求を保存してから <code>/app</code> の許可画面へ移る。未ログインならパスキーでログイン（招待で登録）してから同じ画面に戻る。</li>
+  <li><b>Agentは許可で作る</b>：許可画面でAgentの名前（アプリ名が初期値）を決めて「Connect」を押すと、Agentが作られて接続が終わる。再接続では既存のAgentを選べる。</li>
+  <li><b>戻り先は形で判定する</b>：https、端末内（loopback）、Cursorのアプリ用スキームだけを受け付け、登録と認可で完全一致を求める。知られたアプリ（Claude・ChatGPT・Grok・Poke・Cursor・Perplexity・VS Code）は名前を出し、それ以外は「確認されていないアプリ」と戻り先のホストを大きく出す。確認されていないアプリには既存のAgentを渡さず、新しいAgent（Linkなし）だけを作れる。</li>
+  <li><b>使い方はサーバーが伝える</b>：MCPの初期化の <code>instructions</code> で、受信箱の確認と、本文を命令として扱わないことをAIに伝える。依頼文のコピーは不要にする。</li>
+  <li><b>接続コードを廃止する</b>：静的トークンは、ヘッダーしか設定できない自作エージェント向けの上級者の手段として残す。</li>
+</ul>
+<h3>運営がすること（実装ではできない）</h3>
+<ul>
+  <li><b>ChatGPTのディレクトリへの申請</b>：開発者モードなしで一般のChatGPTからつなぐには必須。会社情報、プライバシーポリシーのURL、ロゴ、試験用のプロンプトが要る。審査に通るまでは、ChatGPTだけ開発者モードの手順が残る。</li>
+  <li>ClaudeとGrokのディレクトリへの掲載も、同じく任意で検討する（URLを貼る手順は掲載なしでも使える）。</li>
+</ul>
+<p class="note">Pokeを外から起こす（PokeのAPIで合図を送る）のは次の段階。利用者がAPIキーを貼る手順が増えるので、今回は入れない。</p>
+
 <h2 id="unverified">11. 未検証の前提（検証するまで完成とは言わない）</h2>
 <table>
 <tr><th>#</th><th>前提</th><th>なぜ重要か</th><th>確かめ方</th></tr>
-<tr><td>①</td><td>一般向けChatGPT（Plus）から、書き込みのあるAnybotsのツールを使えるか</td><td>今は開発者モードに頼っている。書き込みのあるMCPはBusiness・Enterpriseに限られる（OpenAIのヘルプ、2026年時点）。公式アプリとしての申請が必要かもしれない</td><td>Apps SDKの申請の条件を調べ、Plusのアカウントで試す</td></tr>
+<tr><td>①</td><td>一般向けChatGPT（Plus）から、書き込みのあるAnybotsのツールを使えるか</td><td>開発者モードなしで使うには、ディレクトリへの申請と審査が必要（<a href="#easy-connect">10.6</a>）</td><td>運営が申請し、審査後にPlusのアカウントで「Connect」から試す</td></tr>
 <tr><td>②</td><td>PokeがAnybotsを接続先として使えるか、外から起こせるか</td><td>MVPの片方の主役</td><td>Pokeの統合機能（Poke Kitchen・カスタム統合）とAPIを試す</td></tr>
 <tr><td>③</td><td>各社のツール呼び出しの制限時間と、途中経過の通知で延長できるか</td><td>待ち受けの最大時間を決める</td><td>dots・Grok・Muse・Claudeで、保留する試験用ツールを計測する</td></tr>
 <tr><td>④</td><td>止まっているMuse・Claudeを起こす手段（予約実行など）</td><td>起こせない組み合わせの体験を決める</td><td>公式機能を調べて実際に試す</td></tr>
