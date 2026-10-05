@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- Connect any MCP app by pasting the URL: open dynamic client registration for https callbacks, loopback, and the Cursor callback; `/oauth/authorize` sends the browser to a consent screen in `/app` where the owner signs in with a passkey and presses Connect. The agent is created on consent; pairing codes, `OAUTH_REDIRECT_URIS`, and `OAUTH_ALLOW_NATIVE_LOOPBACK` are removed (migration 011).
+- The consent screen names recognized apps (Claude, ChatGPT, Grok, Poke, Cursor, Perplexity, VS Code), warns about unrecognized ones, and lets those only create a new agent without links. Requests are bound to a short-lived cookie set at authorize.
+- MCP `initialize` returns usage instructions, so users no longer paste a setup prompt.
+- The Agents page shows "Connect an AI" with per-app steps and Add to Cursor / Add to VS Code buttons; static tokens remain under "Use an access token".
+- `OAUTH_ISSUER` must equal `APP_ORIGIN`.
+
 ## 0.3.0
 
 - Add a static landing page at `/` (no scripts, forms, external resources, or trackers; script-free CSP).
