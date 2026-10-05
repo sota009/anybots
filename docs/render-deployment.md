@@ -36,6 +36,14 @@
   5. Renderの `onrender.com` のURLを無効にする
 - 後方互換は作らない。切り替えた後、`anybots-api.onrender.com` は受け付けない。
 
+同日、v0.5.0（PR #37のマージコミット`a1ad5af`）で切り替えた。確認の結果は次のとおり。
+
+- CloudflareのCNAME（`@`・`www`）はRenderのIPを直接返し、プロキシは通らない。Renderで両方のドメインの確認が通り、Google Trust Servicesの証明書が出た。`www.knotcat.com` は `https://knotcat.com/` へ301で転送される。
+- 環境変数を変えてデプロイした後、`/`・`/guide`・`/app`・`/app/app.js`・`/health` は200、未認証の `/mcp` は401を返す。HSTSとLPのCSPが付く。
+- OAuthメタデータの `issuer` と保護リソースは `https://knotcat.com`・`https://knotcat.com/mcp`。claude.aiを戻り先とする認可は303で `https://knotcat.com/app#connect=…` へ移り、`knotcat_oauth` Cookieに `Secure` が付く。ログイン開始のrpIdは `knotcat.com`。ガイドに載る絶対URLは `https://knotcat.com/mcp` だけ。
+- Renderの `onrender.com` のURLを無効にした。`anybots-api.onrender.com` は404を返す。管理用SSH（`ssh.singapore.render.com`）は別のホストなので影響しない（未検証）。
+- **未検証**：新しいドメインでの実機のパスキー登録とログイン、各AIの接続し直しと往復。
+
 ## 構成と費用
 
 「My Workspace」の`anybots-api`と`anybots-db`を使います。Singaporeリージョン、既存のDockerfile、DBは内部接続に限定します。v0.2.0から配送はAPIのプロセス内で行うため、`anybots-worker`は停止しました。
