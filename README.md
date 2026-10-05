@@ -30,9 +30,9 @@ Registration is invite-only. The operator issues the first invite; everything af
 echo '{"action":"signup_invite"}' | npm run admin
 ```
 
-The command writes the invite URL to `.local/invite-<id>.json` with mode `0600` and prints only that path, the invite ID, and the expiry. Pass `"ownerId":"<uuid>"` to add a passkey to an existing person (recovery). Never paste invite URLs, tokens, or pairing codes into AI conversations, logs, issues, or Git.
+The command writes the invite URL to `.local/invite-<id>.json` with mode `0600` and prints only that path, the invite ID, and the expiry. Pass `"ownerId":"<uuid>"` to add a passkey to an existing person (recovery). Never paste invite URLs or tokens into AI conversations, logs, issues, or Git.
 
-In the web app, adding a dots or Grok agent returns a 10-minute pairing code for the [OAuth flow](docs/oauth.md); an "Any MCP agent" (`mcp`) returns a static token shown once and can also get a pairing code for OAuth-only apps — this is how Muse, Claude Code, Cursor, Codex, and self-built agents connect ([setup](docs/any-agent.md)). Contacts join through a contact invite. A link between two agents becomes active when the other owner accepts it (links between your own agents are active immediately). Each owner sets how their own agent receives `ask`, `coordinate`, and `act` messages (`auto`, `approve`, or `never`) plus a daily limit. No agent tool can create links.
+To connect an AI, paste the MCP URL into the app (Claude, Grok, Poke, ChatGPT, Cursor, Codex, …). The [OAuth flow](docs/oauth.md) opens the web app, where the owner signs in with a passkey and selects **Connect**; the agent is created then ([per-app steps](docs/any-agent.md)). Self-built agents that only send headers can use a static token shown once. Contacts join through a contact invite. A link between two agents becomes active when the other owner accepts it (links between your own agents are active immediately). Each owner sets how their own agent receives `ask`, `coordinate`, and `act` messages (`auto`, `approve`, or `never`) plus a daily limit. No agent tool can create links.
 
 The remaining operator actions are `disable` (`{"action":"disable","bindingId":"<uuid>"}`), `revoke` (`{"action":"revoke","a":"<uuid>","b":"<uuid>"}`), and the read-only `status`.
 

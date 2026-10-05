@@ -38,6 +38,21 @@ export type Claim = { turnId: string; conversationId: string; epoch: number; lea
 /** Names come from the relay's records for binding `b` and owner `o`, never from message text. */
 const PEER_NAME = `COALESCE(NULLIF(b.display_name,''), b.provider) AS name, COALESCE(NULLIF(o.display_name,''), 'Unnamed') AS owner`;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+export const MAX_AGENTS = 20;
+
+/** Inserts an agent inside the caller's relay-locked transaction so the per-owner cap holds under concurrency. */
+export async function insertBinding(client: PoolClient, input: { ownerId: string; runtimeScope: string; provider: Provider; displayName?: string | undefined; token?: string | undefined; maxActive?: number | undefined }) {
+  if (input.maxActive !== undefined) {
+    const active = await client.query<{ n: number }>('SELECT count(*)::int AS n FROM bindings WHERE owner_id=$1 AND active', [input.ownerId]);
+    if (active.rows[0]!.n >= input.maxActive) throw new RelayError('limit_reached', 'Agent limit reached', 409);
+  }
+  const existing = await client.query('SELECT 1 FROM bindings WHERE runtime_scope=$1 AND active', [input.runtimeScope]);
+  if (existing.rowCount) throw new RelayError('runtime_in_use');
+  const token = input.token ?? randomBytes(32).toString('base64url');
+  const bindingId = randomUUID();
+  await client.query('INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash,display_name) VALUES($1,$2,$3,$4,$5,$6)', [bindingId, input.ownerId, input.runtimeScope, input.provider, hash(token), input.displayName ?? '']);
+  return { bindingId, token, ownerId: input.ownerId };
+}
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new RelayError('invalid_input', 'Invalid arguments', 400);
@@ -108,16 +123,7 @@ export class Relay {
     return this.run(async client => {
       const owner = await client.query('SELECT 1 FROM owners WHERE id=$1', [data.ownerId]);
       if (!owner.rowCount) throw new RelayError('invalid_input', 'Unknown owner', 400);
-      if (data.maxActive !== undefined) {
-        const active = await client.query<{ n: number }>('SELECT count(*)::int AS n FROM bindings WHERE owner_id=$1 AND active', [data.ownerId]);
-        if (active.rows[0]!.n >= data.maxActive) throw new RelayError('limit_reached', 'Agent limit reached', 409);
-      }
-      const existing = await client.query('SELECT 1 FROM bindings WHERE runtime_scope=$1 AND active', [data.runtimeScope]);
-      if (existing.rowCount) throw new RelayError('runtime_in_use');
-      const token = data.token ?? randomBytes(32).toString('base64url');
-      const bindingId = randomUUID();
-      await client.query('INSERT INTO bindings(id,owner_id,runtime_scope,provider,token_hash,display_name) VALUES($1,$2,$3,$4,$5,$6)', [bindingId, data.ownerId, data.runtimeScope, data.provider, hash(token), data.displayName ?? '']);
-      return { bindingId, token, ownerId: data.ownerId };
+      return insertBinding(client, data);
     });
   }
 

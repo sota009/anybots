@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { Accounts } from './accounts.js';
 import { RelayError } from './errors.js';
 import type { Network } from './network.js';
+import type { OAuthPilot } from './oauth.js';
 
 const SITE_CSP = "default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
@@ -56,7 +57,7 @@ function cookie(request: FastifyRequest, name: string): string | undefined {
   return undefined;
 }
 
-export interface WebOptions { accounts: Accounts; network: Network; origin: string; trustProxyHops?: number }
+export interface WebOptions { accounts: Accounts; network: Network; origin: string; trustProxyHops?: number; oauth?: OAuthPilot }
 
 export function registerWeb(app: FastifyInstance, options: WebOptions) {
   const secure = options.origin.startsWith('https://');
@@ -137,7 +138,6 @@ export function registerWeb(app: FastifyInstance, options: WebOptions) {
       api.get('/me', async request => network.overview(owner(request)));
       api.post('/agents', async request => network.createAgent(owner(request), request.body));
       api.patch('/agents/:id', async request => network.renameAgent(owner(request), id(request), request.body));
-      api.post('/agents/:id/pairing', async request => network.pairing(owner(request), id(request)));
       api.put('/agents/:id/webhook', async request => network.setWebhook(owner(request), id(request), request.body));
       api.delete('/agents/:id', async request => network.disableAgent(owner(request), id(request)));
       api.post('/invites', async request => {
@@ -155,6 +155,21 @@ export function registerWeb(app: FastifyInstance, options: WebOptions) {
       api.patch('/links/:id/policy', async request => network.setPolicy(owner(request), id(request), request.body));
       api.delete('/links/:id', async request => network.revokeLink(owner(request), id(request)));
       api.get('/links/:id/timeline', async request => network.timeline(owner(request), id(request)));
+      const { oauth } = options;
+      if (oauth) {
+        const connection = (request: FastifyRequest) => cookie(request, oauth.cookieName) ?? '';
+        api.post('/oauth/request', async request => oauth.describe(owner(request), request.body, connection(request)));
+        api.post('/oauth/approve', async (request, reply) => {
+          const result = await oauth.approve(owner(request), request.body, connection(request));
+          reply.header('Set-Cookie', oauth.cookie('', 0));
+          return result;
+        });
+        api.post('/oauth/deny', async (request, reply) => {
+          const result = await oauth.deny(owner(request), request.body, connection(request));
+          reply.header('Set-Cookie', oauth.cookie('', 0));
+          return result;
+        });
+      }
       api.post('/approvals/:messageId', async request => network.decide(owner(request), id(request, 'messageId'), request.body));
     }, { prefix: '/api/v1' });
   });

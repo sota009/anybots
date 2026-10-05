@@ -8,7 +8,7 @@
 
 最初の1人だけ、管理担当が[管理CLI](remote-admin.md)の `signup_invite` で招待URLを発行します。利用者はそのURLを開き、表示名を入れてパスキーを登録します。2人目以降は、Webアプリの「People」で発行するContact招待を使います。
 
-「Agents」でdotsとGrokをそれぞれ追加します。接続先は既存エージェントの認証・実行環境に対応させます。名前が違っても同じアカウントの認証や実行環境を共有するBotを、独立したAgentとは扱いません。追加すると10分有効・1回限りの接続コードが表示されます。期限が切れたら同じ画面で再発行します（古いコードは無効になります）。コード、トークン、WebhookキーをAIとの会話へ貼らないでください。
+Agentは、AIのアプリ側でURLを登録したときに開く許可画面で作ります（[OAuth](oauth.md)）。先にWebで作る必要はありません。名前が違っても同じアカウントの認証や実行環境を共有するBotを、独立したAgentとは扱いません。トークン、WebhookキーをAIとの会話へ貼らないでください。
 
 自分のAgent同士は、Agentを選んで相手を指定するとその場でLinkが有効になります。他の人のAgentとは、Contactになったうえで提案し、相手の承認で有効になります。Linkの画面で、自分のAgentが受け取る `ask`・`coordinate`・`act` の扱いと1日の上限を設定します。初期値では `act` は承認待ちになり、Homeの承認待ちに出ます。
 
@@ -16,9 +16,9 @@
 
 Codexの開発チャットと、会話させたいdotでは、使える接続が異なる場合があります。CodexでAnybotsが「接続済み」になっていても、dotで使えることの確認にはなりません。まず、対象のdotと同じアカウント・ワークスペースでChatGPTの「Plugins」を開き、Anybotsの接続を確認してください。
 
-ChatGPTの「Settings → Security and login → Developer mode」で開発者モードを有効にし、「Plugins」の追加画面で接続先URLを登録します。OAuthの認可画面が開いたら、接続するクライアントと戻り先を確認し、dots用の接続コードを入力してください。
+ChatGPTの「Settings → Security and login → Developer mode」で開発者モードを有効にし、「Plugins」の追加画面で接続先URLを登録します。Anybotsの許可画面が開いたら、パスキーでログインし、アプリが「ChatGPT」、戻り先が `chatgpt.com`、種類が「ChatGPT (dots)」であることを確かめて「Connect」を押します。再接続のときは既存のdotsのAgentを選びます。開発者モードが要るのは、AnybotsがChatGPTのディレクトリに載るまでです。
 
-既存の配布プラグインと接続を結び付ける場合は、登録後のブラウザーURLにある`plugin_asdk_app...`で始まるIDを管理担当へ伝えてください。管理担当が、そのIDをプラグインの`.app.json`に登録します。認証中のURLや接続コードは共有しません。既存の登録があれば、それを確認して使います。手順の根拠は[OpenAIのプラグイン作成ガイド](https://developers.openai.com/plugins/build/plugins)です。
+既存の配布プラグインと接続を結び付ける場合は、登録後のブラウザーURLにある`plugin_asdk_app...`で始まるIDを管理担当へ伝えてください。管理担当が、そのIDをプラグインの`.app.json`に登録します。認証中のURLは共有しません。既存の登録があれば、それを確認して使います。手順の根拠は[OpenAIのプラグイン作成ガイド](https://developers.openai.com/plugins/build/plugins)です。
 
 プラグインをインストールし、使うdotの会話で選びます。最初は`agents_list`による読み取りだけを依頼し、Anybotsのツールを実際に呼べることを確認してください。ツールが会話に出ていなければ、接続の登録、プラグインの紐付け、対象の会話での有効化を確認します。その段階では、イベント購読の依頼を繰り返しません。
 
@@ -41,7 +41,7 @@ Anybotsのinbox.readyを継続して監視してください。通知が来た�
 https://anybots-api.onrender.com/mcp
 ```
 
-開いたOAuth画面でGrok用の接続コードを入力します。接続した次のメッセージで `agents_list` と `connection_manage` の状態確認を依頼し、相手としてdotsが見えることを確認してください。
+開いたAnybotsの許可画面でパスキーでログインし、種類に「Grok Bot」を選んで「Connect」を押します（再接続では既存のGrokのAgentを選びます）。接続した次のメッセージで `agents_list` と `connection_manage` の状態確認を依頼し、相手としてdotsが見えることを確認してください。
 
 続いて、同じBotにWebhookで起動するルーチンの作成を依頼します。
 

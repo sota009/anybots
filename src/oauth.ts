@@ -3,14 +3,17 @@ import type { Pool, PoolClient } from 'pg';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildOAuthProtectedResourceMetadata, getOAuthProtectedResourceMetadataUrl, OAuthError, type AuthInfo } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { isIP } from 'node:net';
+import { displayName } from './accounts.js';
 import { lockRelay, withTransaction } from './db.js';
+import { RelayError } from './errors.js';
+import { insertBinding, MAX_AGENTS, PROVIDERS, type Provider } from './relay.js';
 import { clientAddress } from './web.js';
 
 const scope = 'relay';
 const opaque = () => randomBytes(32).toString('base64url');
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
-const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
-const browserPolicy = "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+const errorPolicy = "default-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'";
 class Failure extends Error { constructor(readonly error: string, readonly status = 400) { super(error); } }
 function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
@@ -18,19 +21,52 @@ function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   return result.data;
 }
 const scalar = z.string().min(1).max(2048);
-interface Pending { client_id: string; redirect_uri: string; resource: string; state: string; scope: string; challenge: string; cookie_hash: string; attempts: number }
-interface Code extends Pending { binding_id: string; consumed: boolean; family_id: string | null }
+const requestToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+const onlyRequest = z.strictObject({ request: requestToken });
+const invalidRequest = () => new RelayError('invalid_request', 'Connection request is invalid or expired', 400);
+interface Pending { client_id: string; client_name: string; redirect_uri: string; resource: string; state: string; scope: string; challenge: string; cookie_hash: string }
+interface Code { binding_id: string; client_id: string; redirect_uri: string; resource: string; scope: string; challenge: string; consumed: boolean; family_id: string | null }
 interface Family { id: string; binding_id: string; client_id: string; resource: string; scope: string; expires_at: Date; revoked: boolean }
-export interface OAuthOptions { issuer: string; redirectUris: string[]; allowInsecureLocalhost?: boolean; allowNativeLoopback?: boolean; trustProxyHops?: number }
+export interface OAuthOptions { issuer: string; allowInsecureLocalhost?: boolean; trustProxyHops?: number }
+export type Trust = 'known' | 'device' | 'unknown';
 
-/** Deliberately bounded operator-provisioned pilot, not a general identity provider. */
+const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
+const NATIVE_CALLBACKS = new Map([['cursor://anysphere.cursor-mcp/oauth/callback', 'Cursor']]);
+const KNOWN_APPS: [string, string][] = [['claude.ai', 'Claude'], ['claude.com', 'Claude'], ['chatgpt.com', 'ChatGPT'], ['grok.com', 'Grok'], ['x.ai', 'Grok'],
+  ['poke.com', 'Poke'], ['cursor.com', 'Cursor'], ['perplexity.ai', 'Perplexity'], ['vscode.dev', 'VS Code']];
+
+/**
+ * The browser navigates to the callback after consent, so only https, loopback http, and fixed
+ * native callbacks are allowed; script-capable schemes would run on this origin. The raw spelling
+ * must equal the parsed form so aliases cannot slip past exact matching. Loopback identity omits
+ * the port because native apps choose a free port per login.
+ */
+export function redirectIdentity(uri: string): string | undefined {
+  if (NATIVE_CALLBACKS.has(uri)) return uri;
+  let url: URL;
+  try { url = new URL(uri); } catch { return undefined; }
+  if (url.href !== uri || url.username || url.password || uri.includes('#') || url.pathname.includes('%')) return undefined;
+  if (url.protocol === 'https:') return url.hostname.includes('.') && !isIP(url.hostname) && !url.hostname.startsWith('[') ? uri : undefined;
+  if (url.protocol === 'http:' && LOOPBACK.has(url.hostname) && url.port && Number(url.port) > 0) return `http://${url.hostname}${url.pathname}${url.search}`;
+  return undefined;
+}
+
+export function describeRedirect(uri: string): { app: string; trust: Trust; host: string } {
+  const native = NATIVE_CALLBACKS.get(uri);
+  if (native) return { app: native, trust: 'device', host: new URL(uri).host };
+  const url = new URL(uri);
+  if (url.protocol === 'http:') return { app: 'An app on this device', trust: 'device', host: url.host };
+  // A query could feed an open redirect on the app's own site, so only plain callback paths count as that app.
+  const known = !url.search && KNOWN_APPS.find(([domain]) => url.hostname === domain || url.hostname.endsWith(`.${domain}`));
+  return known ? { app: known[1], trust: 'known', host: url.hostname } : { app: 'Unrecognized app', trust: 'unknown', host: url.hostname };
+}
+
 export class OAuthPilot {
   readonly issuer: string;
   readonly resource: string;
   readonly resourceMetadataUrl: string;
-  private readonly secure: boolean;
-  private readonly redirects: Set<string>;
-  private readonly allowNativeLoopback: boolean;
+  readonly secure: boolean;
+  readonly cookieName = 'anybots_oauth';
   private readonly trustProxyHops: number;
   constructor(private readonly pool: Pool, options: OAuthOptions) {
     const issuer = new URL(options.issuer);
@@ -41,23 +77,10 @@ export class OAuthPilot {
     this.resource = `${this.issuer}/mcp`;
     this.resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(new URL(this.resource));
     this.secure = issuer.protocol === 'https:';
-    this.allowNativeLoopback = options.allowNativeLoopback ?? false;
     this.trustProxyHops = options.trustProxyHops ?? 0;
-    if (!options.redirectUris.length || options.redirectUris.length > 4) throw new Error('Exact OAuth redirect allowlist required');
-    this.redirects = new Set(options.redirectUris.map(value => {
-      const url = new URL(value);
-      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-      if (url.username || url.password || url.hash || (url.protocol !== 'https:' &&
-        !(url.protocol === 'http:' && loopback) && value !== 'cursor://anysphere.cursor-mcp/oauth/callback')) throw new Error('Unsafe OAuth redirect');
-      return value;
-    }));
   }
-  private redirectIdentity(uri: string): string | undefined {
-    // Match the raw spelling before URL parsing can normalize aliases. Only the
-    // OS-selected listener port varies; web callbacks retain exact matching.
-    const native = this.allowNativeLoopback && uri.match(/^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})\/callback$/);
-    if (native && native[0] === uri && Number(native[1]) <= 65535) return 'http://127.0.0.1/callback';
-    return this.redirects.has(uri) ? uri : undefined;
+  cookie(value: string, maxAge: number) {
+    return `${this.cookieName}=${value}; HttpOnly; SameSite=Lax; Path=/api/v1/oauth; Max-Age=${maxAge}${this.secure ? '; Secure' : ''}`;
   }
   metadata() {
     return {
@@ -73,23 +96,10 @@ export class OAuthPilot {
       await lockRelay(client);
       await client.query('DELETE FROM oauth_rates WHERE expires_at<clock_timestamp()');
       await client.query('DELETE FROM oauth_pending WHERE expires_at<clock_timestamp()');
-      await client.query('DELETE FROM oauth_pairings WHERE expires_at<clock_timestamp()');
       await client.query("DELETE FROM oauth_tokens WHERE kind='access' AND expires_at<clock_timestamp()");
       await client.query("DELETE FROM oauth_codes WHERE expires_at<clock_timestamp()-interval '1 day'");
       await client.query('DELETE FROM oauth_families WHERE expires_at<clock_timestamp()');
       return work(client);
-    });
-  }
-  async issuePairingCode(bindingId: string) {
-    parse(z.uuid(), bindingId);
-    return this.tx(async client => {
-      if (!(await client.query('SELECT 1 FROM bindings WHERE id=$1 AND active', [bindingId])).rowCount) throw new Failure('invalid_binding');
-      await client.query('DELETE FROM oauth_pairings WHERE binding_id=$1', [bindingId]);
-      if ((await client.query('SELECT count(*)::int AS n FROM oauth_pairings')).rows[0].n >= 100) throw new Failure('temporarily_unavailable', 503);
-      const pairingCode = opaque();
-      const expiresAt = new Date(Date.now() + 600_000);
-      await client.query('INSERT INTO oauth_pairings(hash,binding_id,expires_at) VALUES($1,$2,$3)', [hash(pairingCode), bindingId, expiresAt]);
-      return { pairingCode, expiresAt: expiresAt.toISOString() };
     });
   }
   async verifyAccessToken(token: string): Promise<AuthInfo> {
@@ -133,14 +143,14 @@ export class OAuthPilot {
       });
       routes.addHook('onRequest', async (_request, reply) => {
         reply.header('Cache-Control', 'no-store').header('Pragma', 'no-cache').header('Referrer-Policy', 'no-referrer')
-          .header('X-Content-Type-Options', 'nosniff').header('Content-Security-Policy', browserPolicy);
+          .header('X-Content-Type-Options', 'nosniff').header('Content-Security-Policy', errorPolicy);
       });
       const endpoint = (name: string, fn: (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>) => async (request: FastifyRequest, reply: FastifyReply) => {
         try { await self.throttle(request, name); return await fn(request, reply); }
         catch (error) {
           reply.code(error instanceof Failure ? error.status : 500);
-          if (name === 'authorize' || name === 'consent') {
-            return reply.type('text/html; charset=utf-8').send('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connection not completed</title><h1>Connection not completed</h1><p>Return to the previous page to check your pairing code. After five failed attempts or ten minutes, restart the connection from your agent and request a fresh code from your operator.</p><p>Keep pairing codes in this browser form. Do not paste them into an AI chat.</p></html>');
+          if (name === 'authorize') {
+            return reply.type('text/html; charset=utf-8').send('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connection not completed</title><h1>Connection not completed</h1><p>This connection request is invalid or expired. Start again from your AI app.</p></html>');
           }
           return reply.send({ error: error instanceof Failure ? error.error : 'server_error' });
         }
@@ -151,22 +161,9 @@ export class OAuthPilot {
       routes.get('/.well-known/oauth-protected-resource', async () => protectedResource);
       routes.post('/oauth/register', { bodyLimit: 8192 }, endpoint('register', async (request, reply) => reply.code(201).send(await self.registerClient(request.body))));
       routes.get('/oauth/authorize', endpoint('authorize', async (request, reply) => {
-        const result = await self.begin(request.query);
-        // Chromium needs the same-origin referrer policy to retain Origin on the
-        // consent POST. Cross-origin callbacks still receive no Referer.
-        reply.header('Referrer-Policy', 'same-origin');
-        reply.header('Set-Cookie', `anybots_oauth=${result.cookie}; HttpOnly; SameSite=Lax; Path=/oauth/authorize; Max-Age=600${self.secure ? '; Secure' : ''}`);
-        return reply.type('text/html; charset=utf-8').send(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connect Anybots</title><h1>Connect your agent</h1><p>Client: ${escape(result.name)}</p><p>Redirect: ${escape(result.redirect)}</p><p>Permission: relay — read and send messages, stop conversations, revoke contacts, and disable this connection.</p><p>Enter the one-time pairing code from your private operator file. Never enter it into an AI chat.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="form_token" value="${result.formToken}"><label>Pairing code <input name="pairing_code" type="password" autocomplete="off" required maxlength="43"></label><button name="consent" value="connect">Connect</button></form></html>`);
-      }));
-      routes.post('/oauth/authorize', { bodyLimit: 8192 }, endpoint('consent', async (request, reply) => {
-        if (request.headers.origin !== self.issuer) throw new Failure('invalid_request');
-        const result = await self.complete(request.body, request.headers.cookie ?? '');
-        if (result instanceof Failure) throw result;
-        reply.header('Set-Cookie', `anybots_oauth=; HttpOnly; SameSite=Lax; Path=/oauth/authorize; Max-Age=0${self.secure ? '; Secure' : ''}`);
-        // A separate navigation avoids applying form-action to the provider's
-        // subsequent login redirects. complete() supplies the exact validated callback.
-        const callback = escape(result);
-        return reply.type('text/html; charset=utf-8').send(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="0;url=${callback}"><title>Return to your agent</title><h1>Authorization approved</h1><p>Returning to your agent to finish connecting.</p><p><a href="${callback}">Return to your agent</a></p></html>`);
+        const { request: token, cookie } = await self.begin(request.query);
+        // Consent happens in the web app; the fragment keeps the request token out of logs and referrers.
+        return reply.code(303).header('Set-Cookie', self.cookie(cookie, 600)).header('Location', `${self.issuer}/app#connect=${token}`).send();
       }));
       routes.post('/oauth/token', { bodyLimit: 8192 }, endpoint('token', async (request) => {
         if (request.headers.authorization) throw new Failure('invalid_client', 401);
@@ -186,12 +183,16 @@ export class OAuthPilot {
       token_endpoint_auth_method: z.literal('none').default('none'), grant_types: z.array(z.enum(['authorization_code', 'refresh_token'])).default(['authorization_code', 'refresh_token']),
       response_types: z.array(z.literal('code')).default(['code']), scope: z.literal(scope).optional() }).passthrough(), input);
     const redirectUris = [...new Set(data.redirect_uris)].sort();
-    const identities = redirectUris.map(uri => this.redirectIdentity(uri));
+    const identities = redirectUris.map(redirectIdentity);
     if (identities.some(uri => uri === undefined)) throw new Failure('invalid_redirect_uri');
     const registeredUris = [...new Set(identities)].sort();
     return this.tx(async client => {
+      // Open registration: drop clients that never completed a connection so the bounded registry cannot fill up permanently.
+      await client.query(`DELETE FROM oauth_clients c WHERE c.created_at<clock_timestamp()-interval '1 day'
+        AND NOT EXISTS (SELECT 1 FROM oauth_families f WHERE f.client_id=c.id) AND NOT EXISTS (SELECT 1 FROM oauth_pending p WHERE p.client_id=c.id)
+        AND NOT EXISTS (SELECT 1 FROM oauth_codes o WHERE o.client_id=c.id)`);
       const existing = await client.query<{ id: string; name: string }>('SELECT id,name FROM oauth_clients WHERE redirect_uris=$1::jsonb', [JSON.stringify(registeredUris)]);
-      if (!existing.rowCount && (await client.query('SELECT count(*)::int AS n FROM oauth_clients')).rows[0].n >= 32) throw new Failure('temporarily_unavailable', 503);
+      if (!existing.rowCount && (await client.query('SELECT count(*)::int AS n FROM oauth_clients')).rows[0].n >= 500) throw new Failure('temporarily_unavailable', 503);
       const clientId = existing.rows[0]?.id ?? opaque();
       if (!existing.rowCount) await client.query('INSERT INTO oauth_clients(id,redirect_uris,name) VALUES($1,$2,$3)', [clientId, JSON.stringify(registeredUris), data.client_name]);
       return { client_id: clientId, client_id_issued_at: Math.floor(Date.now() / 1000), redirect_uris: redirectUris, client_name: existing.rows[0]?.name ?? data.client_name,
@@ -202,34 +203,66 @@ export class OAuthPilot {
     const data = parse(z.object({ response_type: z.literal('code'), client_id: scalar, redirect_uri: scalar, resource: z.literal(this.resource),
       scope: z.literal(scope).default(scope), state: z.string().min(1).max(1024), code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), code_challenge_method: z.literal('S256') }).passthrough(), input);
     return this.tx(async client => {
-      const found = await client.query<{ name: string; redirect_uris: string[] }>('SELECT name,redirect_uris FROM oauth_clients WHERE id=$1', [data.client_id]);
-      const identity = this.redirectIdentity(data.redirect_uri);
+      const found = await client.query<{ redirect_uris: string[] }>('SELECT redirect_uris FROM oauth_clients WHERE id=$1', [data.client_id]);
+      const identity = redirectIdentity(data.redirect_uri);
       if (!found.rows[0] || identity === undefined || !found.rows[0].redirect_uris.includes(identity)) throw new Failure('invalid_request');
       if ((await client.query('SELECT count(*)::int AS n FROM oauth_pending')).rows[0].n >= 256) throw new Failure('temporarily_unavailable', 503);
-      const formToken = opaque(), cookie = opaque();
+      const token = opaque(), cookie = opaque();
       await client.query(`INSERT INTO oauth_pending(hash,cookie_hash,client_id,redirect_uri,resource,state,scope,challenge,expires_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp()+interval '10 minutes')`, [hash(formToken), hash(cookie), data.client_id, data.redirect_uri, data.resource, data.state, data.scope, data.code_challenge]);
-      return { formToken, cookie, name: found.rows[0].name, redirect: data.redirect_uri };
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp()+interval '10 minutes')`, [hash(token), hash(cookie), data.client_id, data.redirect_uri, data.resource, data.state, data.scope, data.code_challenge]);
+      return { request: token, cookie };
     });
   }
-  private async complete(input: unknown, cookieHeader: string) {
-    const data = parse(z.object({ form_token: z.string().regex(/^[A-Za-z0-9_-]{43}$/), pairing_code: z.string().max(128), consent: z.literal('connect') }).strict(), input);
-    const cookie = cookieHeader.split(';').map(value => value.trim()).find(value => value.startsWith('anybots_oauth='))?.slice(14) ?? '';
+  /** The request token alone is not enough: the cookie set when the app started the flow must match. */
+  private async pending<T extends { request: string }>(client: PoolClient, input: unknown, cookie: string, schema: z.ZodType<T>) {
+    const parsed = schema.safeParse(input);
+    if (!parsed.success) throw new RelayError('invalid_input', 'Invalid arguments', 400);
+    const found = await client.query<Pending>(`SELECT p.*,c.name AS client_name FROM oauth_pending p JOIN oauth_clients c ON c.id=p.client_id
+      WHERE p.hash=$1 AND NOT p.consumed AND p.expires_at>clock_timestamp() FOR UPDATE OF p`, [hash(parsed.data.request)]);
+    const pending = found.rows[0];
+    if (!pending || pending.cookie_hash !== hash(cookie) || pending.resource !== this.resource || redirectIdentity(pending.redirect_uri) === undefined) throw invalidRequest();
+    return { pending, data: parsed.data, ...describeRedirect(pending.redirect_uri) };
+  }
+  private finish(pending: Pending, params: Record<string, string>) {
+    const redirect = new URL(pending.redirect_uri);
+    for (const [key, value] of Object.entries({ ...params, state: pending.state, iss: this.issuer })) redirect.searchParams.set(key, value);
+    return { redirect: redirect.href };
+  }
+  async describe(ownerId: string, input: unknown, cookie: string) {
     return this.tx(async client => {
-      const found = await client.query<Pending>('SELECT * FROM oauth_pending WHERE hash=$1 AND NOT consumed AND expires_at>clock_timestamp() FOR UPDATE', [hash(data.form_token)]);
-      const pending = found.rows[0];
-      if (!pending || pending.resource !== this.resource || this.redirectIdentity(pending.redirect_uri) === undefined || hash(cookie) !== pending.cookie_hash || pending.attempts >= 5) return new Failure('invalid_request');
-      await client.query('UPDATE oauth_pending SET attempts=attempts+1 WHERE hash=$1', [hash(data.form_token)]);
-      const pairing = await client.query<{ binding_id: string }>('SELECT p.binding_id FROM oauth_pairings p JOIN bindings b ON b.id=p.binding_id WHERE p.hash=$1 AND NOT p.consumed AND p.expires_at>clock_timestamp() AND b.active FOR UPDATE OF p', [hash(data.pairing_code)]);
-      if (!pairing.rows[0]) return new Failure('access_denied');
-      await client.query('UPDATE oauth_pairings SET consumed=true WHERE hash=$1', [hash(data.pairing_code)]);
-      await client.query('UPDATE oauth_pending SET consumed=true WHERE hash=$1', [hash(data.form_token)]);
+      const { pending, app, trust, host } = await this.pending(client, input, cookie, onlyRequest);
+      const suggestedName = trust === 'known' ? app : trust === 'device' && displayName.safeParse(pending.client_name).success ? pending.client_name : 'MCP agent';
+      const agents = trust === 'unknown' ? [] : (await client.query<{ id: string; displayName: string; provider: Provider }>(
+        'SELECT id,display_name AS "displayName",provider FROM bindings WHERE owner_id=$1 AND active ORDER BY created_at', [ownerId])).rows;
+      return { app, trust, host, clientName: pending.client_name, suggested: { provider: host === 'chatgpt.com' ? 'dots' : 'mcp', displayName: suggestedName }, agents };
+    });
+  }
+  async approve(ownerId: string, input: unknown, cookie: string) {
+    const schema = z.union([z.strictObject({ request: requestToken, agentId: z.uuid() }), z.strictObject({ request: requestToken, provider: z.enum(PROVIDERS), displayName })]);
+    return this.tx(async client => {
+      const { pending, trust, data } = await this.pending(client, input, cookie, schema);
+      let bindingId: string;
+      if ('agentId' in data) {
+        // A code for an unrecognized callback may reach an attacker, so it must never carry an agent that already has links.
+        if (trust === 'unknown') throw new RelayError('forbidden', 'Unrecognized apps can only create a new agent', 403);
+        const found = await client.query('SELECT 1 FROM bindings WHERE id=$1 AND owner_id=$2 AND active', [data.agentId, ownerId]);
+        if (!found.rowCount) throw new RelayError('not_found', 'Not found', 404);
+        bindingId = data.agentId;
+      } else {
+        bindingId = (await insertBinding(client, { ownerId, runtimeScope: randomUUID(), provider: data.provider, displayName: data.displayName, maxActive: MAX_AGENTS })).bindingId;
+      }
+      await client.query('UPDATE oauth_pending SET consumed=true WHERE hash=$1', [hash(data.request)]);
       const code = opaque();
       await client.query(`INSERT INTO oauth_codes(hash,binding_id,client_id,redirect_uri,resource,scope,challenge,expires_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp()+interval '2 minutes')`, [hash(code), pairing.rows[0].binding_id, pending.client_id, pending.redirect_uri, pending.resource, pending.scope, pending.challenge]);
-      const redirect = new URL(pending.redirect_uri);
-      redirect.searchParams.set('code', code); redirect.searchParams.set('state', pending.state); redirect.searchParams.set('iss', this.issuer);
-      return redirect.href;
+        VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp()+interval '2 minutes')`, [hash(code), bindingId, pending.client_id, pending.redirect_uri, pending.resource, pending.scope, pending.challenge]);
+      return this.finish(pending, { code });
+    });
+  }
+  async deny(_ownerId: string, input: unknown, cookie: string) {
+    return this.tx(async client => {
+      const { pending, data } = await this.pending(client, input, cookie, onlyRequest);
+      await client.query('UPDATE oauth_pending SET consumed=true WHERE hash=$1', [hash(data.request)]);
+      return this.finish(pending, { error: 'access_denied' });
     });
   }
   private async exchange(input: unknown) {
@@ -243,7 +276,7 @@ export class OAuthPilot {
       if (data.grant_type === 'authorization_code') {
         const result = await client.query<Code>('SELECT c.* FROM oauth_codes c JOIN bindings b ON b.id=c.binding_id WHERE c.hash=$1 AND c.expires_at>clock_timestamp() AND b.active FOR UPDATE OF c', [hash(data.code)]);
         const code = result.rows[0];
-        if (!code || this.redirectIdentity(data.redirect_uri) === undefined || code.client_id !== data.client_id || code.redirect_uri !== data.redirect_uri || code.resource !== data.resource || code.challenge !== createHash('sha256').update(data.code_verifier).digest('base64url')) return new Failure('invalid_grant');
+        if (!code || redirectIdentity(data.redirect_uri) === undefined || code.client_id !== data.client_id || code.redirect_uri !== data.redirect_uri || code.resource !== data.resource || code.challenge !== createHash('sha256').update(data.code_verifier).digest('base64url')) return new Failure('invalid_grant');
         if (code.consumed) {
           if (code.family_id) await client.query('UPDATE oauth_families SET revoked=true WHERE id=$1', [code.family_id]);
           return new Failure('invalid_grant');

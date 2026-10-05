@@ -11,8 +11,8 @@ let db: Awaited<ReturnType<typeof testDatabase>>;
 beforeAll(async () => { db = await testDatabase(); });
 afterAll(async () => { await db?.close(); });
 
-it('connects operator pairing, browser consent, OAuth tokens and the real MCP authorization boundary', async () => {
-  const oauth = new OAuthPilot(db.pool, { issuer, redirectUris: [redirect] });
+it('connects owner consent, OAuth tokens and the real MCP authorization boundary', async () => {
+  const oauth = new OAuthPilot(db.pool, { issuer });
   const relay = new Relay(db.pool, { oauthResource: oauth.resource });
   const binding = await provision(relay, db.pool, { provider: 'dots' });
   const app = buildApp(relay, { allowedHosts: ['relay.example.test'], oauth });
@@ -29,19 +29,10 @@ it('connects operator pairing, browser consent, OAuth tokens and the real MCP au
     const query = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirect, resource: oauth.resource,
       scope: 'relay', state: 'test-state', code_challenge_method: 'S256', code_challenge: createHash('sha256').update(verifier).digest('base64url') });
     const page = await app.inject({ url: `/oauth/authorize?${query}`, headers });
-    expect(page.statusCode).toBe(200);
-    const formToken = page.body.match(/name="form_token" value="([^"]+)"/)?.[1];
-    const cookie = String(page.headers['set-cookie']).split(';')[0]!;
-    const pairing = await oauth.issuePairingCode(binding.bindingId);
-    const consent = await app.inject({ method: 'POST', url: '/oauth/authorize', headers: { ...headers, origin: issuer, cookie },
-      payload: { form_token: formToken, pairing_code: pairing.pairingCode, consent: 'connect' } });
-    expect(consent.statusCode).toBe(200);
-    expect(consent.headers.location).toBeUndefined();
-    expect(consent.headers['cache-control']).toBe('no-store');
-    expect(consent.headers['referrer-policy']).toBe('no-referrer');
-    const href = consent.body.match(/<a href="([^"]+)">Return to your agent<\/a>/)?.[1];
-    expect(href).toBeTruthy();
-    const callback = new URL(href!.replace(/&amp;/g, '&'));
+    expect(page.statusCode).toBe(303);
+    const request = String(page.headers.location).split('#connect=')[1]!;
+    const cookie = String(page.headers['set-cookie']).split(';')[0]!.split('=')[1]!;
+    const callback = new URL((await oauth.approve(binding.ownerId, { request, agentId: binding.bindingId }, cookie)).redirect);
     expect(`${callback.origin}${callback.pathname}`).toBe(redirect);
     expect(callback.searchParams.get('state')).toBe('test-state');
     expect(callback.searchParams.get('iss')).toBe(issuer);

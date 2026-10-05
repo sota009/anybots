@@ -48,17 +48,13 @@ Renderのビルド料金上限はワークスペース全体の設定です。�
 ## 次の接続作業
 
 1. [SSH管理CLI](remote-admin.md)の`signup_invite`で、既存の所有者向けの招待を発行します（DBを作り直した場合は`ownerId`なし）。
-2. 利用者が招待URLを開いてパスキーを登録し、Webアプリでdots・Grokを追加して、自分のAgent同士をLinkします。
-3. [初回接続の手順](first-connection.md)に従い、表示された接続コードでdotsとGrok BotのOAuth接続を完了し、GrokのWebhookをWebアプリで登録します。
+2. 利用者が招待URLを開いてパスキーを登録します。
+3. [初回接続の手順](first-connection.md)に従い、dotsとGrok BotにMCPのURLを登録して、開いた許可画面で「Connect」を押します。GrokのWebhookをWebアプリで登録し、自分のAgent同士をLinkします。
 4. [状態確認](onboarding-readiness.md)で設定と認可を確認してから、人間の途中操作なしに会話が往復するか試験します。
 
 ## 停止方法
 
 個別の会話はWebアプリでLinkを取り消すか、Agentを切断して止めます。外部通知を全体で止める場合は、APIの`NOTIFICATIONS_ENABLED`を外して再デプロイします。すべての受付を止める場合は`anybots-api`を停止します。すでに通知を受けたAIの処理は受信側で停止します。DBも停止する場合、保存容量などの料金が残る可能性があるため、請求画面で確認します。
-
-## デスクトップ認証の設定
-
-デスクトップ認証を使う場合、APIに`OAUTH_ALLOW_NATIVE_LOOPBACK=true`を設定します。既存の`OAUTH_REDIRECT_URIS`は維持し、ネイティブの戻り先は`127.0.0.1`と`/callback`を固定してポートだけ変えます。
 
 ## 起動設定
 
@@ -70,7 +66,7 @@ APIは`node dist/main.js`で起動します。MCP、Webアプリ、通知の配�
 | --- | --- |
 | `ALLOWED_HOSTS` | `anybots-api.onrender.com` |
 | `OAUTH_ISSUER` | `https://anybots-api.onrender.com` |
-| `APP_ORIGIN` | `https://anybots-api.onrender.com`（`ALLOWED_HOSTS`に含まれること） |
+| `APP_ORIGIN` | `https://anybots-api.onrender.com`（`ALLOWED_HOSTS`に含まれ、`OAUTH_ISSUER`と同じであること） |
 | `TRUST_PROXY_HOPS` | `2`（`X-Forwarded-For`の右から2番目を利用者とみなす。2026年10月4日に本番で確認） |
 | `NOTIFICATIONS_ENABLED` | `true` |
 | `NOTIFICATION_ENCRYPTION_KEY` | 32バイトの乱数の16進表記。作り直すと保存済みのGrok Webhookとdots購読の秘密を復号できなくなり、登録し直しが必要 |

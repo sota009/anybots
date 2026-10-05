@@ -14,11 +14,11 @@ describe('OAuth rate-limit isolation', () => {
   let oauth: OAuthPilot;
   beforeAll(async () => {
     db = await testDatabase();
-    oauth = new OAuthPilot(db.pool, { issuer, redirectUris: [redirect] });
+    oauth = new OAuthPilot(db.pool, { issuer });
     app = Fastify(); oauth.register(app); await app.ready();
   });
   beforeEach(async () => {
-    await db.pool.query('TRUNCATE oauth_rates,oauth_pending,oauth_pairings,oauth_codes,oauth_tokens,oauth_families,oauth_clients CASCADE');
+    await db.pool.query('TRUNCATE oauth_rates,oauth_pending,oauth_codes,oauth_tokens,oauth_families,oauth_clients CASCADE');
     // Keep the minute bucket stable even when a test starts at a clock boundary.
     vi.spyOn(Date, 'now').mockReturnValue(Date.now());
   });
@@ -31,8 +31,7 @@ describe('OAuth rate-limit isolation', () => {
 
   it('does not let already-rejected source requests exhaust another clients token allowance', async () => {
     const remoteAddress = '198.51.100.2';
-    const relay = new Relay(db.pool);
-    const binding = await provision(relay, db.pool, { provider: 'dots' });
+    const owner = await createOwner(db.pool);
     const registration = await app.inject({ method: 'POST', url: '/oauth/register', remoteAddress,
       payload: { redirect_uris: [redirect] } });
     expect(registration.statusCode).toBe(201);
@@ -42,14 +41,10 @@ describe('OAuth rate-limit isolation', () => {
       resource: oauth.resource, state: 'isolated-client', code_challenge_method: 'S256',
       code_challenge: createHash('sha256').update(verifier).digest('base64url') });
     const begin = await app.inject({ method: 'GET', url: `/oauth/authorize?${query}`, remoteAddress });
-    expect(begin.statusCode).toBe(200);
-    const formToken = begin.body.match(/name="form_token" value="([^"]+)"/)![1];
-    const pairing = await oauth.issuePairingCode(binding.bindingId);
-    const consent = await app.inject({ method: 'POST', url: '/oauth/authorize', remoteAddress,
-      headers: { origin: issuer, cookie: String(begin.headers['set-cookie']).split(';')[0]! },
-      payload: { form_token: formToken, pairing_code: pairing.pairingCode, consent: 'connect' } });
-    expect(consent.statusCode).toBe(200);
-    const callback = consent.body.match(/<a href="([^"]+)">Return to your agent<\/a>/)![1]!.replaceAll('&amp;', '&');
+    expect(begin.statusCode).toBe(303);
+    const request = String(begin.headers.location).split('#connect=')[1]!;
+    const cookie = String(begin.headers['set-cookie']).split(';')[0]!.split('=')[1]!;
+    const { redirect: callback } = await oauth.approve(owner, { request, provider: 'dots', displayName: 'ChatGPT' }, cookie);
     const code = new URL(callback).searchParams.get('code')!;
 
     const responses = [];
@@ -73,7 +68,7 @@ describe('OAuth rate-limit isolation', () => {
   });
 
   it('throttles the trusted forwarded client, not the proxy, and ignores spoofed left entries', async () => {
-    const proxied = new OAuthPilot(db.pool, { issuer, redirectUris: [redirect], trustProxyHops: 1 });
+    const proxied = new OAuthPilot(db.pool, { issuer, trustProxyHops: 1 });
     const behindProxy = Fastify(); proxied.register(behindProxy); await behindProxy.ready();
     try {
       const request = (forwarded: string) => behindProxy.inject({ method: 'POST', url: '/oauth/token', remoteAddress: '10.0.0.1',
