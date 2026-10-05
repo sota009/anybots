@@ -69,8 +69,9 @@ Recognized apps are listed by callback host in `src/oauth.ts`: Claude
 (`claude.ai`, `claude.com`), ChatGPT (`chatgpt.com`), Grok (`grok.com`, `x.ai`),
 Poke (`poke.com`), Cursor (`cursor.com`, `cursor://`), Perplexity
 (`perplexity.ai`), and VS Code (`vscode.dev`). Loopback callbacks are shown as
-"An app on this device". Any other host is shown as an **unrecognized app**, with
-its host. An unrecognized app can only create a new agent. It cannot take over an
+"An app on this device". A callback with a query string is not trusted as its
+host's app, because the query could feed an open redirect on that site. Any other
+callback is shown as an **unrecognized app**, with its host. An unrecognized app can only create a new agent. It cannot take over an
 existing agent that already has links. The `client_name` sent at registration is
 shown only as an unverified label.
 

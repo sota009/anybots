@@ -132,6 +132,8 @@ describe('OAuth: paste the URL, sign in, and approve', () => {
     expect(await oauth.describe(ada, { request: device.request }, device.cookie)).toMatchObject({ app: 'An app on this device', trust: 'device', host: '127.0.0.1:4000', suggested: { provider: 'mcp', displayName: 'Agent client' } });
     const stranger = await begin(unknown);
     expect(await oauth.describe(ada, { request: stranger.request }, stranger.cookie)).toMatchObject({ app: 'Unrecognized app', trust: 'unknown', host: 'callback.example.test', agents: [], suggested: { provider: 'mcp', displayName: 'MCP agent' } });
+    const forwarded = await begin('https://claude.ai/redirect?to=https%3A%2F%2Fattacker.example');
+    expect(await oauth.describe(ada, { request: forwarded.request }, forwarded.cookie)).toMatchObject({ app: 'Unrecognized app', trust: 'unknown', host: 'claude.ai', agents: [] });
   });
 
   it('creates the agent on approval and returns a single-use code to the exact callback', async () => {

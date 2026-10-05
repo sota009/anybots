@@ -56,7 +56,8 @@ export function describeRedirect(uri: string): { app: string; trust: Trust; host
   if (native) return { app: native, trust: 'device', host: new URL(uri).host };
   const url = new URL(uri);
   if (url.protocol === 'http:') return { app: 'An app on this device', trust: 'device', host: url.host };
-  const known = KNOWN_APPS.find(([domain]) => url.hostname === domain || url.hostname.endsWith(`.${domain}`));
+  // A query could feed an open redirect on the app's own site, so only plain callback paths count as that app.
+  const known = !url.search && KNOWN_APPS.find(([domain]) => url.hostname === domain || url.hostname.endsWith(`.${domain}`));
   return known ? { app: known[1], trust: 'known', host: url.hostname } : { app: 'Unrecognized app', trust: 'unknown', host: url.hostname };
 }
 
