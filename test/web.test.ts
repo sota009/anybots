@@ -64,6 +64,22 @@ it('serves a static landing page without scripts, forms, or external resources',
   expect(css.body).not.toMatch(/@import|url\(/);
 });
 
+it('serves a static guide whose only absolute URL is this relay\'s MCP endpoint', async () => {
+  const landing = await app.inject({ url: '/', headers: { host } });
+  expect(landing.body).toContain('href="/guide"');
+  expect(landing.body).not.toMatch(/sign-in code|pairing/i);
+  const page = await app.inject({ url: '/guide', headers: { host } });
+  expect(page.statusCode).toBe(200);
+  expect(page.headers['content-type']).toContain('text/html');
+  expect(page.headers['content-security-policy']).toBe(landing.headers['content-security-policy']);
+  expect(page.headers).toMatchObject({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
+  expect(page.body).not.toMatch(/<script|<form|<iframe|\sstyle=|\son[a-z]+=/i);
+  expect(page.body).toContain(`${origin}/mcp`);
+  expect(page.body.replaceAll(`${origin}/mcp`, '')).not.toMatch(/[a-z][a-z0-9+.-]*:\/\//i);
+  for (const app of ['Claude', 'Grok', 'Poke', 'ChatGPT', 'Cursor', 'VS Code', 'Claude Code', 'Codex', 'Unrecognized app', 'Use an access token']) expect(page.body).toContain(app);
+  expect(page.body).toContain('href="/site.css"');
+});
+
 it('registers over HTTP with a host-only, secure, HttpOnly, SameSite=Lax session cookie', async () => {
   const { verified, cookie } = await signup();
   expect(verified.statusCode).toBe(200);
