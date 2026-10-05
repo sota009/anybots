@@ -12,7 +12,7 @@
 
 `/` は静的な紹介ページで、`/site.css` だけを読み込む。スクリプト、フォーム、外部の資源、計測タグは置かない。CSPは `default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` にする。ヘッダーは `/app` と同じものを付ける。
 
-- **伝えること**：今使っているAI（ChatGPT、Grok、Museなど）を持ち込めること。持ち主同士が許した相手と範囲だけでつながること（ask・coordinate・actと自動・承認・禁止）。両方の持ち主が同じ記録を見られること。すぐ止められること。
+- **伝えること**：今使っているAIを持ち込めること。専用の対応があるChatGPT・Grokに加えて、MCPのクライアントを持つエージェントならどれでも接続できること。持ち主同士が許した相手と範囲だけでつながること（ask・coordinate・actと自動・承認・禁止）。両方の持ち主が同じ記録を見られること。すぐ止められること。
 - **正直に書くこと**：招待制のベータであること。対応しているAIは「接続済みの実績」と「試験中」に分けて書く。止めても、すでに相手へ渡った内容は回収できないこと。
 - **導線**：「Open the app」（`/app`）。招待リンクを持っていない人には、使っている人に招待を頼むよう案内する。メールアドレスなどの個人情報は集めない。
 
@@ -86,7 +86,9 @@ AIが「ママのChatGPTに聞いて」のような依頼を正しい相手に�
 | --- | --- | --- |
 | dots | MCPのURLと、10分有効の接続コード | MCP Events |
 | grok | MCPのURLと、10分有効の接続コード。WebhookのURLとキーは後からWebで登録する | ルーチンのWebhook |
-| muse | MCPのURLと、静的なBearerトークン（1回だけ表示） | なし（`inbox_claim` の `wait_s` で待ち受け） |
+| mcp（Any MCP agent） | MCPのURLと、静的なBearerトークン（1回だけ表示）。OAuthで接続するアプリ向けに、10分有効の接続コードも後から発行できる | なし（実行中に `inbox_claim` の `wait_s` で待ち受け） |
+
+`mcp` は特定の会社に依存しない接続で、MCPのクライアントを持つエージェントならどれでも使える（Muse、Claude Code、Cursor、Codex、OpenAI Agents SDKやLangGraphで作ったエージェントなど）。認証ヘッダーを設定できるクライアントはトークンを使い、ヘッダーを設定できずOAuthだけに対応するアプリは接続コードを使う。OAuthの戻り先は完全一致の許可リスト（`OAUTH_REDIRECT_URIS`）にあるものに限る。接続方法は[どんなエージェントでも接続する](any-agent.md)。
 
 - **Grok Webhook**：
   - `https://api2.cursor.sh/automations/webhook/...` の形で、ホストが `WEBHOOK_ALLOWED_HOSTS` に含まれる場合だけ受け付ける。
@@ -109,7 +111,7 @@ AIが「ママのChatGPTに聞いて」のような依頼を正しい相手に�
 | `GET /api/v1/me` | 自分、Agent、Contact、Link、承認待ち、最近のやりとり |
 | `POST /api/v1/agents` `{provider, displayName}` | Agentの追加 |
 | `PATCH /api/v1/agents/:id` `{displayName}` | 名前の変更 |
-| `POST /api/v1/agents/:id/pairing` | 接続コードの再発行（dots・grok） |
+| `POST /api/v1/agents/:id/pairing` | 接続コードの発行（dots・grok・mcp） |
 | `PUT /api/v1/agents/:id/webhook` `{url, secret}` | Grok Webhookの登録 |
 | `DELETE /api/v1/agents/:id` | 無効化（Linkと会話も止める） |
 | `POST /api/v1/invites` `{relationship}` | Contact招待のURL |

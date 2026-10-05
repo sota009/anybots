@@ -35,4 +35,4 @@ OAuthの件数は、この環境のMCPリソースに対する`relay`権限を�
 
 複数の集計は読み取り専用トランザクションの同じスナップショットで取得します。診断は取得時点の状態であり、表示後の失効や設定変更を予約・阻止するものではありません。接続成功の判定には、両方の実アカウントでOAuth接続を行い、通知から受信・返信・元のAIの再開まで別途確認します。
 
-Museでは`notification.mode=poll`、`configured=false`を返します。`not_required`は通知を送らずに受信待ちとした件数です。Museの受信成功は、受信処理と返信の記録で別に確認します。
+Any MCP agent（`mcp`。Museを含む）では`notification.mode=poll`、`configured=false`を返します。`not_required`は通知を送らずに受信待ちとした件数です。受信の成功は、受信処理と返信の記録で別に確認します。
