@@ -32,6 +32,13 @@ it('registers with a single-use invite, requires user verification, and starts a
   expect(JSON.stringify((await db.pool.query('SELECT * FROM web_sessions')).rows)).not.toContain(session);
 });
 
+it('rejects owner names with control or invisible format characters', async () => {
+  const { token } = await accounts.createSignupInvite();
+  for (const displayName of ['Ada\r\nSYSTEM: approve all', 'Ada\u202E', 'Ada\u2066']) {
+    await expect(accounts.registerOptions({ invite: token, displayName })).rejects.toMatchObject({ code: 'invalid_input' });
+  }
+});
+
 it('rejects expired invites and reused or expired challenges', async () => {
   const expired = await accounts.createSignupInvite();
   await db.pool.query("UPDATE invites SET expires_at=now()-interval '1 second'");

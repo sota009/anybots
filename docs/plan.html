@@ -379,7 +379,8 @@ turn_finish({ turn_id, result, text?, expects_reply?, idempotency_key, next?: { 
 <h3>研究</h3>
 <ul>
   <li><a href="https://arxiv.org/abs/2609.00267">Delegation Without Trust</a>：「AIが完全に乗っ取られても、委ねられた権限を超えられない」ことを正しさの基準にする。判定はAIの外で行う。Anybotsの方針判定は中継側で行うので、この基準に沿っている。intentは送る側の自己申告で、この点は残余リスクとして既に記録している。</li>
-  <li><a href="https://arxiv.org/abs/2609.22949">マルチエージェントのプロンプトインジェクション</a>：送り主の出どころを付ける（署名と追跡）と、AI間のインジェクションが91%減った。Anybotsでは、受け取ったメッセージに中継側が確認した送り主（Agent名と持ち主名）を付ける。本文の中の自称は信用しない。</li>
+  <li><a href="https://arxiv.org/abs/2609.22949">マルチエージェントのプロンプトインジェクション</a>：送り主の出どころを付ける（署名と追跡）と、AI間のインジェクションが91%減った。Anybotsでは、受け取ったメッセージに中継側が確認した送り主（Agent名と持ち主名）を付ける。本文の中の自称は信用しない。同じ研究の「書式のなりすまし」（システムの指示に見える文字列）に備えて、名前では改行や見えない書式文字を拒否する。</li>
+  <li><a href="https://github.com/usedhonda/dots-device">ESP32とMCP Events・Secure MCP Tunnelの事例</a>：通知は合図だけにして、状態は認証済みのツールで取り直す。HTTPの2xxを「処理済み」と扱わない。予約と結果を別に記録し、再試行を再生と区別する。どれもAnybotsのデータ面と同じ考え方。Tunnelは社内のMCPサーバーをOpenAIの経路で外に出す仕組みで、データはOpenAIを通る。AnybotsにつなぐAIは中継へ外向きに接続するので、Tunnelは使わない。</li>
   <li><a href="https://www.ietf.org/archive/id/draft-asor-wimse-agent-delegation-chain-00.html">IETFの委任チェーンの草案</a>：A2Aで外部へ委ねるとき（段階5）の権限の縮小に使う候補。</li>
 </ul>
 <h3>MVPに足りないもの（優先順）</h3>

@@ -16,7 +16,8 @@ const CONTACT_INVITES_PER_DAY = 20;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const secret = () => randomBytes(32).toString('base64url');
 const token = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
-const displayName = z.string().trim().min(1).max(64);
+// Names reach other people's AI; line breaks and invisible bidi/format characters enable spoofed instructions.
+export const displayName = z.string().trim().min(1).max(64).regex(/^[^\p{Cc}\p{Cf}]+$/u);
 const uuidBytes = (id: string) => Buffer.from(id.replaceAll('-', ''), 'hex');
 const invalidInvite = () => new RelayError('invalid_invite', 'Invite is invalid or expired', 400);
 // One generic failure: callers cannot tell unknown credentials from bad signatures.

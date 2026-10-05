@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
+import { displayName } from './accounts.js';
 import { lockRelay, withTransaction } from './db.js';
 import { RelayError } from './errors.js';
 import type { OAuthPilot } from './oauth.js';
@@ -11,7 +12,6 @@ import { PROVIDERS, type Policy, type Provider, type Relay } from './relay.js';
 const MAX_AGENTS = 20;
 const PAIRINGS_PER_HOUR = 10;
 const uuid = z.uuid();
-const name = z.string().trim().min(1).max(64);
 const decision = z.enum(['auto', 'approve', 'never']);
 const policySchema = z.strictObject({ ask: decision, coordinate: decision, act: decision, dailyLimit: z.number().int().min(1).max(1000) });
 const notFound = () => new RelayError('not_found', 'Not found', 404);
@@ -103,7 +103,7 @@ export class Network {
   }
 
   async createAgent(ownerId: string, input: unknown) {
-    const data = parse(z.strictObject({ provider: z.enum(PROVIDERS), displayName: name }), input);
+    const data = parse(z.strictObject({ provider: z.enum(PROVIDERS), displayName }), input);
     const created = await this.relay.provisionBinding({ ownerId, runtimeScope: randomUUID(), provider: data.provider, displayName: data.displayName, maxActive: MAX_AGENTS });
     const connect = data.provider === 'mcp'
       ? { mcpUrl: this.options.mcpUrl, token: created.token }
@@ -118,7 +118,7 @@ export class Network {
   }
 
   async renameAgent(ownerId: string, id: string, input: unknown) {
-    const data = parse(z.strictObject({ displayName: name }), input);
+    const data = parse(z.strictObject({ displayName }), input);
     return this.tx(async client => {
       await this.agent(client, ownerId, id);
       await client.query('UPDATE bindings SET display_name=$2 WHERE id=$1', [id, data.displayName]);
