@@ -68,6 +68,7 @@ export function registerWeb(app: FastifyInstance, options: WebOptions) {
     js: readFileSync(new URL('app.js', assets), 'utf8'),
     css: readFileSync(new URL('app.css', assets), 'utf8'),
     site: readFileSync(new URL('index.html', assets), 'utf8'),
+    guide: readFileSync(new URL('guide.html', assets), 'utf8').replaceAll('%MCP_URL%', `${options.origin}/mcp`),
     siteCss: readFileSync(new URL('site.css', assets), 'utf8'),
   };
   const { accounts, network } = options;
@@ -97,6 +98,7 @@ export function registerWeb(app: FastifyInstance, options: WebOptions) {
     });
 
     routes.get('/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Content-Security-Policy', SITE_CSP).send(files.site));
+    routes.get('/guide', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Content-Security-Policy', SITE_CSP).send(files.guide));
     routes.get('/site.css', async (_request, reply) => reply.type('text/css; charset=utf-8').send(files.siteCss));
     routes.get('/app', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Content-Security-Policy', CSP).send(files.html));
     routes.get('/app/app.js', async (_request, reply) => reply.type('text/javascript; charset=utf-8').send(files.js));
