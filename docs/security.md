@@ -109,6 +109,7 @@ python3 -B -m unittest discover -s .agents/skills/web-security-review/scripts -p
 
 - 失敗テストを先に書いた：共通ロックを別接続が保持したまま偽Bearerを照合すると、修正前はロック待ちでタイムアウトし、修正後は401になる。同一送信元の21回目は429、送信元上限で拒否した分は `web_rates` の全体バケットに入らない。別IPの正当な `initialize` は200。`TRUST_PROXY_HOPS` の右側だけを数え、IPv6は/64でまとめる（`test/mcp-auth-limit.test.ts`）
 - 成功した `/mcp` は失敗枠を消費しない。会話の60/時や Link の `daily_limit` は従来どおり
+- `npm run check`（2026-10-08）：型検査、27ファイル238テスト、ビルドが成功
 - **残るリスク**：同一送信元からの大量の並列失敗は、上限確定前に照合の SELECT が走りうる（共通ロックは取らない）。正当なトークンを盗んだ要求は失敗枠の外であり、書き込みは従来の共通ロックと会話上限に依る。`TRUST_PROXY_HOPS` を誤ると送信元上限が効かない（Web/OAuthと同じ）
 - **未検証**：本番の固定IPからの `/mcp` 失敗上限、複数プロセスでの `web_rates` 以外の共有キャッシュ
 
