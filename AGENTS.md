@@ -14,7 +14,7 @@
 
 ## セットアップ
 
-必要: Node.js 24 LTS（`package.json` の `engines`: `>=24.20.0 <25`）と、Docker（デーモン稼働）または既存の PostgreSQL 18。
+必要: Node.js 24 LTS（`.nvmrc` は `24`、`package.json` の `engines`: `>=24.20.0 <25`）と、Docker（デーモン稼働）または既存の PostgreSQL 18。
 
 Cursor Cloud Agent のイメージに `/usr/local/lib/nodejs/bin` があるときは、そのディレクトリを PATH の先頭に置きます（Node 24.21.0 が入っていることがある）。無い場合は nvm などで 24 LTS を入れ、`node -v` が v24 であることを確認してから進めます。ログインシェルの Node 22 のままだと `npm ci` は通っても `engines` と合いません。
 

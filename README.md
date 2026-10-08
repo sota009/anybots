@@ -10,7 +10,7 @@ Development is incremental. A dots-initiated exchange with the existing Grok Bot
 
 ## Develop
 
-Requires Node.js 24 LTS (`>=24.20.0 <25`) and Docker with a running daemon, or an existing PostgreSQL 18 database. Agent conventions and the same setup path are in [AGENTS.md](AGENTS.md). `.env.example` lists variables; export them (or pass `--env-file` to Docker). The process does not load `.env` by itself.
+Requires Node.js 24 LTS (`.nvmrc` is `24`; `engines`: `>=24.20.0 <25`) and Docker with a running daemon, or an existing PostgreSQL 18 database. Agent conventions and the same setup path are in [AGENTS.md](AGENTS.md). `.env.example` lists variables; export them (or pass `--env-file` to Docker). The process does not load `.env` by itself.
 
 On Cursor Cloud Agent images that ship Node 24 at `/usr/local/lib/nodejs/bin`, put that directory first on `PATH` so `node -v` is v24, not the login-shell Node 22.
 
