@@ -66,7 +66,7 @@ export class OAuthPilot {
   readonly resource: string;
   readonly resourceMetadataUrl: string;
   readonly secure: boolean;
-  readonly cookieName = 'knotcat_oauth';
+  readonly cookieName: string;
   private readonly trustProxyHops: number;
   constructor(private readonly pool: Pool, options: OAuthOptions) {
     const issuer = new URL(options.issuer);
@@ -77,10 +77,12 @@ export class OAuthPilot {
     this.resource = `${this.issuer}/mcp`;
     this.resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(new URL(this.resource));
     this.secure = issuer.protocol === 'https:';
+    // __Host- needs Path=/ and no Domain (MDN Set-Cookie). Path is not a security boundary; XSS on /app can already call /api/v1/oauth.
+    this.cookieName = this.secure ? '__Host-knotcat_oauth' : 'knotcat_oauth';
     this.trustProxyHops = options.trustProxyHops ?? 0;
   }
   cookie(value: string, maxAge: number) {
-    return `${this.cookieName}=${value}; HttpOnly; SameSite=Lax; Path=/api/v1/oauth; Max-Age=${maxAge}${this.secure ? '; Secure' : ''}`;
+    return `${this.cookieName}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${this.secure ? '; Secure' : ''}`;
   }
   metadata() {
     return {
@@ -249,6 +251,8 @@ export class OAuthPilot {
         if (!found.rowCount) throw new RelayError('not_found', 'Not found', 404);
         bindingId = data.agentId;
       } else {
+        // dots/grok can take outbound webhooks; an unrecognized callback must not mint those types.
+        if (trust === 'unknown' && data.provider !== 'mcp') throw new RelayError('forbidden', 'Unrecognized apps can only create an MCP agent', 403);
         bindingId = (await insertBinding(client, { ownerId, runtimeScope: randomUUID(), provider: data.provider, displayName: data.displayName, maxActive: MAX_AGENTS })).bindingId;
       }
       await client.query('UPDATE oauth_pending SET consumed=true WHERE hash=$1', [hash(data.request)]);

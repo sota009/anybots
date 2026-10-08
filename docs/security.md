@@ -21,7 +21,7 @@
 | 入力検証・文脈に応じた出力処理、4章57〜72頁 | 本文は16KiB、HTTPは128KiB。SQLは値をパラメータ化し、HTMLへ出す値はエスケープする | `src/app.ts`、`src/oauth.ts`、`test/app.test.ts` |
 | 多層防御・最小権限、4章76〜79頁 | 非root実行、私設DB接続、完全一致のホスト許可、認証後も操作ごとに認可する | `Dockerfile`、`src/main.ts`、`src/relay.ts` |
 | レビュー・自動化・監査、5章81〜102頁 | 資料、失敗テスト、実装、独立レビューの順で変更する。本文や資格情報をログに出さない | CI、配送試行記録、PR |
-| XSS・CSRF・クリックジャッキング、6章105〜130頁 | 同意画面はWebアプリ（CSP `script-src 'self'`、`textContent` で描画）。許可のAPIはセッション、完全一致のOrigin、要求トークン、要求に結び付いたHttpOnly Cookieの照合で守る | `src/oauth.ts`、`web/app.js`、`test/oauth.test.ts` |
+| XSS・CSRF・クリックジャッキング、6章105〜130頁 | 同意画面はWebアプリ（CSP `script-src 'self'`、`textContent` で描画）。許可のAPIはセッション、完全一致のOrigin、要求トークン、要求に結び付いたHttpOnly Cookieの照合で守る。HTTPSの同意Cookieはセッションと同じ `__Host-`（`Secure`・`Path=/`・`Domain`なし） | `src/oauth.ts`、`web/app.js`、`test/oauth.test.ts`、`test/web.test.ts` |
 | TLSと鍵、3章41〜56頁・7章131〜152頁 | 公開HTTPS、Webhookの証明書検証、DB保存秘密値の認証付き暗号化を使う | `src/providers/crypto.ts`、`src/providers/transport.ts` |
 | 認証とセッション、8〜9章153〜191頁 | パスキーでログインした持ち主の明示の許可、PKCE、短期アクセストークン、更新トークンの再使用検出と失効を使う | OAuth試験群 |
 | 認可、10章193〜210頁 | 送信者は認証から決める。他人の会話・権限・接続を変更できない。取り消しを通知直前にも再確認する | relay・events・配送の競合試験 |
@@ -35,7 +35,7 @@
 OAuthは、URLを貼るだけで接続できる形に変えました（[OAuth](oauth.md)）。接続コードと、最大4件の戻り先の許可リストを廃止し、パスキーでログインした持ち主がWebアプリの許可画面で「Connect」を押したときだけ認可コードを出します。守る条件は次のとおりです。
 
 - **戻り先によるスクリプト実行**：許可した後、ブラウザーは戻り先へ移動する。`javascript:` や `data:` を通すとknotcatのオリジンでスクリプトが動くので、https（DNS名）、loopbackのhttp、Cursorの固定スキームだけを受け付ける。表記は解析結果と一致することを求め、別表記を拒否する。
-- **同意の誘導（確認されていないアプリ）**：誰でもクライアントを登録できるので、攻撃者が自分の戻り先を持つクライアントを作り、許可のURLを送りつけられる。許可画面に、戻り先のホストと「Unrecognized app」の警告を出す。確認されていないアプリには既存のAgentを選ばせず、新しいAgent（Linkなし）しか作らせない。そのAgentが他人と話すには、持ち主がLinkを作り、相手も承認する必要がある。
+- **同意の誘導（確認されていないアプリ）**：誰でもクライアントを登録できるので、攻撃者が自分の戻り先を持つクライアントを作り、許可のURLを送りつけられる。許可画面に、戻り先のホストと「Unrecognized app」の警告を出す。確認されていないアプリには既存のAgentを選ばせず、新しい `mcp` 型のAgent（Linkなし）しか作らせない。`dots` と `grok` は外部通知先を持てるので、確認されていない戻り先ではサーバーが拒否する。画面も種類の選択を出さない。そのAgentが他人と話すには、持ち主がLinkを作り、相手も承認する必要がある。
 - **要求の横取り**：許可画面のURL（要求トークン）だけが漏れても、要求を始めたブラウザーのCookieがなければ許可できない。攻撃者が自分で始めた要求を被害者に許可させて、被害者のAgentの認可を得る攻撃を防ぐ。
 - **クライアント登録の枯渇**：登録は送信元ごとに毎分20回、全体で毎分100回。接続を一度も完了していないクライアントは1日で消し、全体で500件までにする。上限に達したら新しい登録を断る。
 - **既存のAgentの乗っ取り**：再接続で既存のAgentを選べるのは、戻り先が知られたアプリのホストか、端末内（loopback・Cursorのスキーム）の場合だけ。これらは、認可コードが攻撃者の手に渡らない戻り先である。知られたホストでも、クエリ付きの戻り先は「Unrecognized app」として扱う。そのサイトにオープンリダイレクトがあると、クエリで指定した先へコードが渡りうるため。パスだけで転送する欠陥は防げないので、残るリスクとして記録する。
@@ -50,6 +50,15 @@ OAuthは、URLを貼るだけで接続できる形に変えました（[OAuth](o
 - 本番（Render、v0.4.0、2026-10-05）：`/app` が200、メタデータの `issuer` が本番のオリジン、不正な `/oauth/authorize` がHTMLの400、claude.aiを戻り先とする登録が201、`javascript:` の戻り先が400、正しい要求が303で `/app#connect=…` へ移り `knotcat_oauth` Cookieに `HttpOnly`・`SameSite=Lax`・`Path=/api/v1/oauth`・`Secure` が付く、セッションなしの `/api/v1/oauth/request` が401
 - 送信元ごとの上限は、本番では確かめられなかった。試験した環境は要求ごとに外向きIPが変わり（3回で3つのIP）、OAuthの25回も、Web認証の25回も拒否されなかった。全体の上限を本番で使い切る試験は、他の利用者を止めるので行っていない
 - **未検証**：独立した別エージェントのレビュー、本番での画面操作、固定IPからの本番の送信元ごとの上限、実際のClaude・Grok・Poke・ChatGPT・Cursorからの接続と往復、実機のパスキー
+
+### 検証の結果（2026-10-08：未確認クライアントの種別と同意Cookie）
+
+2026-10-08のセキュリティレビュー（`main` `7033058`）で再現した2件を、失敗テストを先に書いてから直した。
+
+- **未確認クライアントの `dots` / `grok` 作成（Medium）**：`trust === 'unknown'` の制限は既存Agentの再接続だけだった。`redirect_uris: ['https://evil.example/callback']` で登録し、許可で `{ provider: 'dots' }` を送ると、修正前は200で `bindings.provider='dots'` になった。修正後はサーバーが `forbidden` で拒否し、`mcp` だけを作る。クエリ付きの知られたホスト（`https://claude.ai/redirect?to=…`）も未確認と同じ扱いにする。許可画面は未確認のとき種類の選択を出さず、`provider: 'mcp'` だけを送る（`test/oauth.test.ts`、`test/web.test.ts`）。知られたアプリと端末内アプリは、これまでどおり `dots` / `grok` を選べる。
+- **同意Cookieの `__Host-`（Low）**：2026-10-08に[MDN Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie)を確認した。`__Host-` は `Secure`、`Path=/`、`Domain` なしをブラウザーが強制する。`Path` 属性は経路の絞り込みであり、別パスからの読み取りを防ぐセキュリティ境界ではない。同意Cookieを `Path=/api/v1/oauth` のままにするとプレフィックスが使えず、将来サブドメインを足したときの Cookie tossing にセッションCookieより弱い。`/app` のXSSはもともと `/api/v1/oauth` へ `fetch` できるので、Pathを狭めても同意の横取りは防げない。HTTPSではセッションと同じ `__Host-knotcat_oauth`（`HttpOnly; SameSite=Lax; Path=/; Secure`、`Domain`なし）にする。HTTPのloopbackでは `__Host-` が使えないので `knotcat_oauth`（`HttpOnly; SameSite=Lax; Path=/`、`Secure`なし）。属性は試験で固定する。
+- `npm run check`（2026-10-08）：型検査、26ファイル238テスト、ビルドが成功。依存の追加はない。
+- **残るリスク**：確認されていないアプリへ `mcp` 型を渡すこと自体は残る。知られたアプリの許可画面では、利用者が種類を `dots` / `grok` に変えられる。Cookieの `__Host-` は対応ブラウザーに依存する。`__Host-Http-` はセッションCookieに合わせて使っていない。進行中の同意（最大10分）はCookie名の変更でやり直せになる。本番の画面操作と、実際のClaude・ChatGPTからの未確認クライアント接続は未検証。
 
 OAuthの頻度制限では、あるIPが自分の上限を超えて拒否された要求まで全体枠に加算すると、別の利用者の認証も止められます。書籍164頁のロックアウトの注意に対応し、IP別の判定で拒否した要求は全体枠を消費しないようにしました。異なるIPでの正常なコード交換と、複数IPを合計した全体上限の両方を試験しました。
 

@@ -40,7 +40,7 @@
     invalid_input: 'Check the fields and try again.',
     conversation_stopped: 'That conversation has already stopped.',
     invalid_request: 'This connection request is invalid or expired. Start again from your AI app.',
-    forbidden: 'Unrecognized apps can only create a new agent.',
+    forbidden: 'Unrecognized apps can only create a new MCP agent.',
   };
   const explain = error => messages[error?.code] || (error?.name === 'NotAllowedError' ? 'Passkey request was cancelled.' : 'Something went wrong. Try again.');
 
@@ -130,18 +130,19 @@
     }
     const busy = el('p', { class: 'hint', role: 'status' });
     const run = work => async () => { busy.textContent = 'Connecting…'; try { await work(); } catch (error) { busy.textContent = explain(error); } };
+    const unrecognized = info.trust === 'unknown';
     const name = el('input', { id: 'connect-name', maxlength: 64, value: info.suggested.displayName, required: true });
-    const provider = el('select', { id: 'connect-provider' }, Object.entries(providers).map(([v, l]) => el('option', { value: v, selected: v === info.suggested.provider }, l)));
+    const provider = unrecognized ? null : el('select', { id: 'connect-provider' }, Object.entries(providers).map(([v, l]) => el('option', { value: v, selected: v === info.suggested.provider }, l)));
     const target = el('select', { id: 'connect-target' }, el('option', { value: '' }, 'A new agent'), info.agents.map(a => el('option', { value: a.id }, agentName(a))));
-    const fresh = el('div', { class: 'stack' }, el('label', { for: 'connect-name' }, 'Agent name'), name, el('label', { for: 'connect-provider' }, 'Type'), provider);
+    const fresh = el('div', { class: 'stack' }, el('label', { for: 'connect-name' }, 'Agent name'), name, unrecognized ? null : [el('label', { for: 'connect-provider' }, 'Type'), provider]);
     target.addEventListener('change', () => { fresh.hidden = Boolean(target.value); });
     return card(
       el('h2', {}, `Connect ${info.app} to knotcat`),
-      info.trust === 'unknown' ? el('div', { class: 'flash error', role: 'alert' }, 'knotcat does not recognize this app. Connect only if you started this from an app you trust.') : null,
+      unrecognized ? el('div', { class: 'flash error', role: 'alert' }, 'knotcat does not recognize this app. Connect only if you started this from an app you trust.') : null,
       el('p', { class: 'meta' }, 'Sends you back to ', el('code', {}, info.host), info.clientName ? ` · registered as "${info.clientName}"` : null),
       el('p', {}, 'It will be able to read and send messages with agents you link, stop conversations, and disconnect itself. It cannot create links or change who it talks to.'),
       el('form', { onsubmit: e => { e.preventDefault();
-        run(() => leave({ url: '/oauth/approve', body: target.value ? { agentId: target.value } : { provider: provider.value, displayName: name.value } }))(); } },
+        run(() => leave({ url: '/oauth/approve', body: target.value ? { agentId: target.value } : { provider: unrecognized ? 'mcp' : provider.value, displayName: name.value } }))(); } },
         info.agents.length ? [el('label', { for: 'connect-target' }, 'Connect as'), target] : null,
         fresh,
         el('div', { class: 'actions' },
