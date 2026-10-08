@@ -6,10 +6,11 @@ import type { Accounts } from './accounts.js';
 import { RelayError } from './errors.js';
 import type { Network } from './network.js';
 import type { OAuthPilot } from './oauth.js';
+import { AUTH_ATTEMPT_LIMITS } from './rates.js';
 
 const SITE_CSP = "default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
-const AUTH_LIMITS = { perSource: 20, global: 1000 };
+const AUTH_LIMITS = AUTH_ATTEMPT_LIMITS;
 const WRITE_LIMITS = { perSource: 60, global: 3000 };
 const SESSION_MAX_AGE_S = 14 * 24 * 3600;
 

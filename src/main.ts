@@ -43,6 +43,7 @@ const web = origin ? {
   }),
 } : undefined;
 const app = buildApp(relay, {
+  trustProxyHops,
   onEventDiagnostic: diagnostic => console.log(JSON.stringify(diagnostic)),
   ...(allowedHosts ? { allowedHosts } : {}),
   ...(notifications ? { events: new EventSubscriptions(pool, notifications) } : {}),

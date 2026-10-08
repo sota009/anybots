@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { lockRelay, withTransaction } from './db.js';
 import { RelayError } from './errors.js';
+import { admitRate, AUTH_ATTEMPT_LIMITS } from './rates.js';
 import { INBOX_CHANNEL, OUTBOX_CHANNEL, type Signals } from './signals.js';
 export { RelayError } from './errors.js';
 
@@ -87,12 +88,12 @@ export class Relay {
     for (const row of conversations.rows) await this.stop(client, row.id, 'expired');
   }
 
-  private async auth(client: PoolClient, token: string): Promise<Binding> {
+  private async auth(db: Pool | PoolClient, token: string): Promise<Binding> {
     if (typeof token !== 'string' || token.length < 32 || token.length > 512) throw new RelayError('unauthorized', 'Invalid credential', 401);
-    const result = await client.query<Binding>(`SELECT ${bindingColumns} FROM bindings WHERE token_hash=$1 AND active`, [hash(token)]);
+    const result = await db.query<Binding>(`SELECT ${bindingColumns} FROM bindings WHERE token_hash=$1 AND active`, [hash(token)]);
     if (result.rows[0]) return result.rows[0];
     if (this.options.oauthResource) {
-      const access = await client.query<Binding>(`SELECT b.id,b.owner_id AS "ownerId",b.runtime_scope AS "runtimeScope",b.provider,f.id AS "oauthFamilyId"
+      const access = await db.query<Binding>(`SELECT b.id,b.owner_id AS "ownerId",b.runtime_scope AS "runtimeScope",b.provider,f.id AS "oauthFamilyId"
         FROM oauth_tokens t JOIN oauth_families f ON f.id=t.family_id JOIN bindings b ON b.id=f.binding_id
         WHERE t.hash=$1 AND t.kind='access' AND NOT t.consumed AND t.expires_at>clock_timestamp()
         AND NOT f.revoked AND f.expires_at>clock_timestamp() AND f.resource=$2 AND f.scope='relay' AND b.active`,
@@ -101,7 +102,9 @@ export class Relay {
     }
     throw new RelayError('unauthorized', 'Invalid credential', 401);
   }
-  authenticate(token: string) { return this.run(client => this.auth(client, token)); }
+  /** Token lookup is a read. Failed auth must not take the relay write lock. */
+  authenticate(token: string) { return this.auth(this.pool, token); }
+  admitAuth(source: string) { return admitRate(this.pool, 'mcp', source, AUTH_ATTEMPT_LIMITS); }
 
   /** Revalidate authority on a caller's existing transaction, never a second pool slot. */
   async revalidate(client: PoolClient, token: string, expectedBindingId: string): Promise<{ oauthFamilyId?: string }> {
