@@ -203,8 +203,10 @@ Muse対応では、変更前にMuseの登録が`invalid_input`で拒否される
 ### 守る条件と届かない範囲
 
 - **未リンクの第三者**：Camと被害Agentの会話本文は、参加していない接続からは読めない。`conversation_read` / `inbox_claim` は `forbidden` を返し、本文は応答に出ない（既存のIDOR試験と本項の回帰試験）。
-- **処理中ターン**：`inbox_claim` でターンが `active`（または期限切れの `uncertain`）のあいだ、その会話以外の `conversation_read` は `runtime_busy`。同じ会話の履歴は読める。`conversation_open` は従来どおり実行環境がビジーなら拒否する。
-- **届かない範囲（残余）**：ターンを `turn_finish` したあと、被害Agentは参加会話を `conversation_read` でき、別の有効なLink相手へ `conversation_open` できる。受け取る側の `ask` が既定の `auto` なら `approval='none'` で届く。claimの時点で本文はすでに被害Agentへ渡っている。中継はLink内を配送する設計であり、AIが別会話の本文をコピーして送ることは、方針が許す範囲では止めない。完全な防止はLLM側の信頼境界の話である。
+- **処理中ターン（A）**：`inbox_claim` でターンが `active`（または期限切れの `uncertain`）のあいだ、その会話以外の `conversation_read` は `runtime_busy`。同じ会話の履歴は読める。`conversation_open` は従来どおり実行環境がビジーなら拒否する。
+- **read のあと別相手への送信（C1）**：Agentが会話を `conversation_read` すると、その会話の相手bindingをAgentごとに記録する。直近10分以内に、記録した相手以外への送信（`conversation_open` と `turn_finish` の返信）は、受け取る側の方針が `auto` でも `approval='pending'` にする。承認するのは**送る側の持ち主**（注入されたAgentの持ち主）。受け取る側の受信箱・通知・タイムライン・Homeの承認待ちには、承認するまで本文を出さない。同じ相手との送受信は、そのLinkの `ask=auto` を変えない。
+- **窓の根拠**：10分は担当期限（ターンのlease）と同じ。報告の再現は finish 直後の同一セッションであり、その長さで足りる。Linkの `ask` 既定は変えず、窓の外の通常の新規会話は `auto` のままにする。メッセージが pending になったあとは、窓が切れても持ち主が承認または拒否するまで配達しない。
+- **届かない範囲（残余）**：`inbox_claim` で得た本文を `conversation_read` せずに別相手へ `conversation_open` すると、C1の窓は付かない。10分を過ぎたあとの別相手への送信も、新しい read が無ければ `auto` のまま。中継は本文のコピーを検知しない。完全な防止はLLM側の信頼境界の話である。
 
 ### 検討した選択肢
 
@@ -212,23 +214,23 @@ Muse対応では、変更前にMuseの登録が`invalid_input`で拒否される
 
 | 選択肢 | 内容 | 報告の再現を止めるか | 既存利用者への影響 | 残る抜け |
 | --- | --- | --- | --- | --- |
-| A. 処理中ターンは他会話の `conversation_read` を拒否 | 実行環境に `active`/`uncertain` のターンがある間、その会話以外の全文読みを閉じる | **いいえ**。再現は finish のあとに read と open をする | 同じ会話の履歴読みと、完了後の自動返信は維持。既存試験の自動配送は壊さない | finish 後の転送。claimで得た本文を読まずに open する経路 |
-| B. 新規Linkの `ask` 初期値を `approve` | 既存Linkは `auto` のまま。新しい組だけ開封に持ち主承認が要る | 新規の攻撃者Linkに対しては **はい**（pendingになり受信箱に出ない）。既存の `auto` Linkには効かない | 新規Linkの `ask` が毎回承認待ちになる。製品はLink成立後の自動会話が前提。`grantPair` やWebの既定も変わり、既存試験の大半が赤くなる | 既存Link。持ち主が新規Linkを `auto` に戻したあと |
-| C1. 他会話を読んだあと、別相手への open を承認待ちにする（時間窓） | `conversation_read` のあと、別peerへの `conversation_open` を `pending` にする | 報告の手順（readを含む）には **はい** | 複数Linkをまたぐ正当な依頼（「Camの内容をGrokに聞いて」）が承認待ちになる。同じ会話の返信（`turn_finish`）は維持 | claim済み本文を読まずに open する経路。窓の外 |
-| C2. Linkごとの転送許可フラグ（新規はオフ） | 他会話由来とみなした送信を、フラグのない相手へ届けない | フラグ実装と検知の定義次第 | 新規Linkの既定をオフにすると、複数相手との自動連携が止まる。既存をオンに残すと攻撃面は残る | 本文の由来をサーバーは確実には分からない。フラグをオンにしたLink |
-| C3. 既存Linkの `ask` を `approve` へ移行 | 全組で open が承認待ち | **はい**（方針を変えた組） | **既存の自動会話を止める**。保守的ではない | 持ち主が `auto` に戻した組 |
+| A. 処理中ターンは他会話の `conversation_read` を拒否 | 実行環境に `active`/`uncertain` のターンがある間、その会話以外の全文読みを閉じる | **いいえ**。再現は finish のあとに read と open をする | 同じ会話の履歴読みと、完了後の自動返信は維持 | finish 後の転送。claimで得た本文を読まずに open する経路 |
+| B. 新規Linkの `ask` 初期値を `approve` | 既存Linkは `auto` のまま。新しい組だけ開封に持ち主承認が要る | 新規の攻撃者Linkに対しては **はい**。既存の `auto` Linkには効かない | 新規Linkの `ask` が毎回承認待ちになる。製品はLink成立後の自動会話が前提 | 既存Link。持ち主が新規Linkを `auto` に戻したあと |
+| C1. 他会話を読んだあと、別相手への送信を承認待ちにする（時間窓） | `conversation_read` のあと10分、別peerへの送信を送る側の持ち主の `pending` にする | 報告の手順（readを含む）には **はい** | 複数Linkをまたぐ正当な依頼が承認待ちになる。同じ相手の `ask=auto` は維持 | claim済み本文を読まずに open する経路。窓の外 |
+| C2. Linkごとの転送許可フラグ（新規はオフ） | 他会話由来とみなした送信を、フラグのない相手へ届けない | フラグ実装と検知の定義次第 | 新規の自動連携が止まる。既存をオンのままにすると穴が残る | 本文の由来はサーバーでは分からない |
+| C3. 既存Linkの `ask` を `approve` へ移行 | 全組で open が承認待ち | **はい**（方針を変えた組） | **既存の自動会話を止める** | 持ち主が `auto` に戻した組 |
 
-採用したのは **A だけ**。報告の再現は止めない。B/Cは既存の `auto` 配送か新規Linkの自動会話を変える製品判断なので、この変更では入れない。
+採用したのは **A + C1**。報告の read-then-open 手順は止まる。B/C2/C3は既存または新規の `auto` 配送を広く変えるので入れない。
 
 ### 検証の結果（2026-10-08）
 
-対象コミットはレビュー時の `main` `7033058`。試験は隔離スキーマの実PostgreSQL。実LLMは使わず、サーバーが許す操作だけを模擬クライアントで再現する。
+対象はレビュー時の `main` `7033058` と、その後の `4bc2319`（OAuth）、`83ddc89`（MCPから破壊操作を外す）。試験は隔離スキーマの実PostgreSQL。実LLMは使わず、サーバーが許す操作だけを模擬クライアントで再現する。
 
-- **報告の手順**（`test/cross-peer-forward.test.ts`）：Cam→被害へ `PRIVATE_FROM_CAM` を送り、被害が `inbox_claim` → `turn_finish` → その会話の `conversation_read` → 攻撃者へ `conversation_open`（本文 `forwarded:PRIVATE_FROM_CAM`）。攻撃者の `inbox_claim` は同じ本文を `approval='none'` で受け取る。未リンクの第三者の `conversation_read` は `forbidden` で、応答に本文は出ない。
-- **修正前**（実装なしの `7033058`）：上記の転送は成功する。処理中ターンでも他会話の `conversation_read` は全文を返す。
-- **修正後（A）**：処理中ターンの他会話 `conversation_read` は `runtime_busy`。同じ会話の読み取りと、finish 後の報告手順の転送は従来どおり成功する（**repro stopped: no**）。
-- **未検証**：実dots / Grok / Muse に注入文を送った場合のLLMの実際のツール呼び出し。本番の既存Linkを `approve` へ変えた場合の運用影響。
+- **報告の手順**（`test/cross-peer-forward.test.ts`）：Cam→被害へ `PRIVATE_FROM_CAM` を送り、被害が `inbox_claim` → `turn_finish` → その会話の `conversation_read` → 攻撃者へ `conversation_open`（本文 `forwarded:PRIVATE_FROM_CAM`）。未リンクの第三者の `conversation_read` は `forbidden` で、応答に本文は出ない。
+- **修正前**（C1なし）：攻撃者の受信箱に `approval='none'` で届く。処理中ターンでも他会話の `conversation_read` は全文を返す。
+- **修正後（A+C1）**：処理中ターンの他会話 `conversation_read` は `runtime_busy`。報告手順の `conversation_open` は `approval='pending'`、攻撃者の `inbox_claim` は空。送る側の持ち主が承認すると配達する。受け取る側の持ち主では承認できない。同じ相手の読み取り→返信／新規openは `auto` のまま。**repro stopped: yes**（read-then-open）。claimだけして読まずに open する経路は届く。
+- **未検証**：実dots / Grok / Muse に注入文を送った場合のLLMの実際のツール呼び出し。
 
 ### 残るリスク
 
-持ち主が同じAgentを複数の相手と `ask=auto` でLinkしているとき、接続済みAIが一方の本文をもう一方へ送れる。未リンクの第三者へは届かない。止めるには、新規または既存の `ask` を `approve` にする、転送フラグ、read-then-open の承認窓など、製品としての方針変更が要る。
+`inbox_claim` の本文を `conversation_read` せずに別の `ask=auto` Linkへ送ること、および read から10分経過後の別相手への送信は、自動で届く。未リンクの第三者へは届かない。本文のコピー検知はしない。止まるのは「他会話を読んでから別相手へ送る」経路であり、LLMがclaimの内容を記憶して送ることは止めない。

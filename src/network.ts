@@ -82,14 +82,18 @@ export class Network {
           r.id AS "agentId",r.display_name AS "agentName",s.display_name AS "fromAgentName",s.provider AS "fromProvider",so.display_name AS "fromOwnerName"
         FROM messages m JOIN bindings r ON r.id=m.recipient_binding_id JOIN bindings s ON s.id=m.sender_binding_id JOIN owners so ON so.id=s.owner_id
         JOIN conversations c ON c.id=m.conversation_id
-        WHERE r.owner_id=$1 AND m.approval='pending' AND c.status='open' ORDER BY m.created_at LIMIT 50`, [ownerId]);
+        WHERE m.approval='pending' AND c.status='open'
+          AND ((m.held_for='recipient' AND r.owner_id=$1) OR (m.held_for='sender' AND s.owner_id=$1))
+        ORDER BY m.created_at LIMIT 50`, [ownerId]);
       const recent = await client.query(`SELECT m.id,m.created_at AS "createdAt",m.intent,m.approval,left(m.text,200) AS preview,
           s.display_name AS "fromAgentName",s.owner_id=$1 AS "fromMe",r.display_name AS "toAgentName",
           c.status AS "conversationStatus",o.status AS delivery,t.result
         FROM messages m JOIN bindings s ON s.id=m.sender_binding_id JOIN bindings r ON r.id=m.recipient_binding_id
         JOIN conversations c ON c.id=m.conversation_id
         LEFT JOIN outbox o ON o.message_id=m.id LEFT JOIN turns t ON t.input_message_id=m.id
-        WHERE s.owner_id=$1 OR r.owner_id=$1 ORDER BY m.created_at DESC LIMIT 20`, [ownerId]);
+        WHERE (s.owner_id=$1 OR r.owner_id=$1)
+          AND (m.approval<>'pending' OR m.held_for<>'sender' OR s.owner_id=$1)
+        ORDER BY m.created_at DESC LIMIT 20`, [ownerId]);
       await client.query('COMMIT');
       return { me, mcpUrl: this.options.mcpUrl, agents: agents.rows, contacts: contacts.rows, links: links.rows, approvals: approvals.rows, recent: recent.rows };
     } catch (error) {
@@ -205,7 +209,8 @@ export class Network {
         s.owner_id=$3 AS "fromMe",s.display_name AS "fromAgentName",c.status AS "conversationStatus",o.status AS delivery,t.result
       FROM messages m JOIN bindings s ON s.id=m.sender_binding_id JOIN conversations c ON c.id=m.conversation_id
       LEFT JOIN outbox o ON o.message_id=m.id LEFT JOIN turns t ON t.input_message_id=m.id
-      WHERE (c.binding_a=$1 AND c.binding_b=$2) OR (c.binding_a=$2 AND c.binding_b=$1)
+      WHERE ((c.binding_a=$1 AND c.binding_b=$2) OR (c.binding_a=$2 AND c.binding_b=$1))
+        AND (m.approval<>'pending' OR m.held_for<>'sender' OR s.owner_id=$3)
       ORDER BY m.created_at DESC, m.sequence DESC LIMIT 100`, [link.binding_a, link.binding_b, ownerId]);
     return { linkId: id, messages: rows.rows };
   }
