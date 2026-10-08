@@ -224,7 +224,7 @@ Muse対応では、変更前にMuseの登録が`invalid_input`で拒否される
 
 ### 検証の結果（2026-10-08）
 
-対象はレビュー時の `main` `7033058` と、その後の `4bc2319`（OAuth）、`83ddc89`（MCPから破壊操作を外す）。試験は隔離スキーマの実PostgreSQL。実LLMは使わず、サーバーが許す操作だけを模擬クライアントで再現する。
+対象はレビュー時の `main` `7033058` と、その後の `4bc2319`（OAuth）、`83ddc89`（MCPから破壊操作を外す）、`1142577`（`/mcp` 認証失敗の上限とロック外照合）。試験は隔離スキーマの実PostgreSQL。実LLMは使わず、サーバーが許す操作だけを模擬クライアントで再現する。
 
 - **報告の手順**（`test/cross-peer-forward.test.ts`）：Cam→被害へ `PRIVATE_FROM_CAM` を送り、被害が `inbox_claim` → `turn_finish` → その会話の `conversation_read` → 攻撃者へ `conversation_open`（本文 `forwarded:PRIVATE_FROM_CAM`）。未リンクの第三者の `conversation_read` は `forbidden` で、応答に本文は出ない。
 - **修正前**（C1なし）：攻撃者の受信箱に `approval='none'` で届く。処理中ターンでも他会話の `conversation_read` は全文を返す。
