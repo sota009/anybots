@@ -372,10 +372,6 @@ export class Relay {
     parse(uuid, a); parse(uuid, b);
     return this.run(client => this.revoke(client, a, b));
   }
-  async contactRevoke(token: string, recipientBindingId: string) {
-    parse(uuid, recipientBindingId);
-    return this.run(async client => { const me = await this.auth(client, token); await this.revoke(client, me.id, recipientBindingId); return { revoked: true }; });
-  }
   private async disable(client: PoolClient, id: string) {
     await client.query('UPDATE bindings SET active=false WHERE id=$1', [id]);
     await client.query("UPDATE grants SET status='revoked' WHERE binding_a=$1 OR binding_b=$1", [id]);
@@ -383,7 +379,4 @@ export class Relay {
     for (const c of conversations.rows) await this.stop(client, c.id, 'closed');
   }
   async disableBinding(id: string) { parse(uuid, id); return this.run(client => this.disable(client, id)); }
-  async connectionDisable(token: string) {
-    return this.run(async client => { const me = await this.auth(client, token); await this.disable(client, me.id); return { disabled: true }; });
-  }
 }
