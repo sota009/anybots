@@ -1,12 +1,12 @@
 import { createMcpFastifyApp } from '@modelcontextprotocol/fastify';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpHandler, McpServer, ProtocolError, type CallToolResult, type ToolCallback } from '@modelcontextprotocol/server';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { Relay, RelayError } from './relay.js';
 import { EventError } from './events.js';
-import { registerWeb, type WebOptions } from './web.js';
+import { clientAddress, registerWeb, type WebOptions } from './web.js';
 
 const MAX_HTTP_BODY_BYTES = 128 * 1024;
 const id = z.uuid();
@@ -28,6 +28,7 @@ export interface AppOptions {
   events?: EventHooks;
   onEventDiagnostic?: (diagnostic: EventDiagnostic) => void;
   oauth?: { resourceMetadataUrl: string; register(app: FastifyInstance): void };
+  trustProxyHops?: number;
   web?: WebOptions;
 }
 
@@ -82,19 +83,24 @@ export function buildApp(relay: Relay, options: AppOptions = {}) {
   });
   app.get('/health', async () => ({ status: 'ok' }));
 
+  const trustProxyHops = options.trustProxyHops ?? options.web?.trustProxyHops ?? 0;
+  const unauthorized = (reply: FastifyReply) => reply.header('WWW-Authenticate', challenge).code(401).send({ error: 'unauthorized' });
   app.addHook('onRequest', async (request, reply) => {
     if (request.url.split('?')[0] !== '/mcp') return;
+    const source = clientAddress(request, trustProxyHops);
     const authorization = request.headers.authorization;
     const match = authorization?.match(/^Bearer ([^\s]+)$/i);
     if (!match?.[1]) {
-      return reply.header('WWW-Authenticate', challenge).code(401).send({ error: 'unauthorized' });
+      if (!await relay.admitAuth(source)) return reply.code(429).send({ error: 'rate_limited' });
+      return unauthorized(reply);
     }
     try {
       await relay.authenticate(match[1]);
       credentials.set(request, match[1]);
     } catch (error) {
       if (!(error instanceof RelayError)) return reply.code(503).send({ error: 'authentication_unavailable' });
-      return reply.header('WWW-Authenticate', challenge).code(401).send({ error: 'unauthorized' });
+      if (!await relay.admitAuth(source)) return reply.code(429).send({ error: 'rate_limited' });
+      return unauthorized(reply);
     }
   });
 
