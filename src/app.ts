@@ -148,7 +148,7 @@ function createRelayServer(relay: Relay, token: string, events?: EventHooks, onE
       expectsReply: input.expects_reply, idempotencyKey: input.idempotency_key,
       ...(input.intent === undefined ? {} : { intent: input.intent }),
     }));
-  register('conversation_read', 'Read an authorized conversation. Reading does not claim or finish work.',
+  register('conversation_read', 'Read an authorized conversation. Reading does not claim or finish work. While a turn is claimed, only that conversation can be read.',
     z.strictObject({ conversation_id: id, after_sequence: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional() }),
     (input) => relay.conversationRead(token, {
       conversationId: input.conversation_id,

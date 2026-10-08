@@ -40,6 +40,8 @@ export type Claim = { turnId: string; conversationId: string; epoch: number; lea
 const PEER_NAME = `COALESCE(NULLIF(b.display_name,''), b.provider) AS name, COALESCE(NULLIF(o.display_name,''), 'Unnamed') AS owner`;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export const MAX_AGENTS = 20;
+/** After conversation_read of peer X, a send to a different peer is held this long. Same as the turn lease. */
+export const CROSS_PEER_READ_WINDOW = '10 minutes';
 
 /** Inserts an agent inside the caller's relay-locked transaction so the per-owner cap holds under concurrency. */
 export async function insertBinding(client: PoolClient, input: { ownerId: string; runtimeScope: string; provider: Provider; displayName?: string | undefined; token?: string | undefined; maxActive?: number | undefined }) {
@@ -86,6 +88,7 @@ export class Relay {
     for (const row of expired.rows) await this.stop(client, row.conversation_id, 'uncertain');
     const conversations = await client.query<{ id: string }>("SELECT id FROM conversations WHERE status='open' AND expires_at <= clock_timestamp()");
     for (const row of conversations.rows) await this.stop(client, row.id, 'expired');
+    await client.query('DELETE FROM conversation_reads WHERE read_at <= clock_timestamp() - $1::interval', [CROSS_PEER_READ_WINDOW]);
   }
 
   private async auth(db: Pool | PoolClient, token: string): Promise<Binding> {
@@ -180,8 +183,8 @@ export class Relay {
     await client.query('INSERT INTO idempotency(binding_id,operation,key,request_hash,response) VALUES($1,$2,$3,$4,$5)', [bindingId, operation, idempotencyKey, hash(JSON.stringify(request)), JSON.stringify(response)]);
   }
 
-  /** The receiving side's policy decides delivery; intent is the sender's claim, not proof. */
-  private async admit(client: PoolClient, sender: string, recipient: string, kind: Intent): Promise<'none' | 'pending'> {
+  /** The receiving side's policy decides delivery; a recent read of another peer holds the send for the sender's owner. */
+  private async admit(client: PoolClient, sender: string, recipient: string, kind: Intent): Promise<{ approval: 'none' | 'pending'; heldFor: 'recipient' | 'sender' }> {
     const [a, b] = [sender, recipient].sort() as [string, string];
     const grant = await client.query<{ policy: Policy }>(`SELECT CASE WHEN binding_a=$3 THEN policy_a ELSE policy_b END AS policy FROM grants WHERE binding_a=$1 AND binding_b=$2 AND active`, [a, b, recipient]);
     const policy = grant.rows[0]?.policy;
@@ -189,16 +192,22 @@ export class Relay {
     if (policy[kind] === 'never') throw new RelayError('forbidden_by_policy', 'The recipient does not accept this intent', 403);
     const recent = await client.query<{ n: number }>("SELECT count(*)::int AS n FROM messages WHERE recipient_binding_id=$1 AND sender_binding_id=$2 AND created_at>clock_timestamp()-interval '24 hours'", [recipient, sender]);
     if (recent.rows[0]!.n >= policy.daily_limit) throw new RelayError('rate_limited');
-    return policy[kind] === 'approve' ? 'pending' : 'none';
+    if (policy[kind] === 'approve') return { approval: 'pending', heldFor: 'recipient' };
+    const crossed = await client.query(
+      'SELECT 1 FROM conversation_reads WHERE binding_id=$1 AND peer_binding_id<>$2 AND read_at>clock_timestamp()-$3::interval LIMIT 1',
+      [sender, recipient, CROSS_PEER_READ_WINDOW],
+    );
+    if (crossed.rowCount) return { approval: 'pending', heldFor: 'sender' };
+    return { approval: 'none', heldFor: 'recipient' };
   }
 
   private async message(client: PoolClient, c: Conversation, sender: string, recipient: string, text: string, expectsReply: boolean, kind: Intent, replyTo?: string) {
-    const approval = await this.admit(client, sender, recipient, kind);
+    const admitted = await this.admit(client, sender, recipient, kind);
     const id = randomUUID();
     const seq = await client.query<{ sequence: number }>('UPDATE conversations SET next_sequence=next_sequence+1 WHERE id=$1 RETURNING next_sequence-1 AS sequence', [c.id]);
-    await client.query('INSERT INTO messages(id,conversation_id,sequence,sender_binding_id,recipient_binding_id,text,expects_reply,reply_to,intent,approval) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [id, c.id, seq.rows[0]!.sequence, sender, recipient, text, expectsReply, replyTo ?? null, kind, approval]);
-    if (approval === 'none') await this.deliver(client, id, c, recipient);
-    return { id, approval };
+    await client.query('INSERT INTO messages(id,conversation_id,sequence,sender_binding_id,recipient_binding_id,text,expects_reply,reply_to,intent,approval,held_for) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [id, c.id, seq.rows[0]!.sequence, sender, recipient, text, expectsReply, replyTo ?? null, kind, admitted.approval, admitted.heldFor]);
+    if (admitted.approval === 'none') await this.deliver(client, id, c, recipient);
+    return { id, approval: admitted.approval };
   }
 
   private async deliver(client: PoolClient, messageId: string, c: Pick<Conversation, 'id' | 'epoch'>, recipient: string) {
@@ -210,12 +219,13 @@ export class Relay {
     await client.query(`SELECT pg_notify('${INBOX_CHANNEL}',$1), pg_notify('${OUTBOX_CHANNEL}','')`, [recipient]);
   }
 
-  /** Only the receiving agent's owner decides; unknown and foreign messages look the same. */
+  /** The holding owner decides (recipient policy, or sender after a cross-peer read); unknown and foreign messages look the same. */
   async decideApproval(ownerId: string, messageId: string, decision: 'approve' | 'decline') {
     parse(uuid, ownerId); parse(uuid, messageId); parse(z.enum(['approve', 'decline']), decision);
     return this.run(async client => {
       const found = await client.query<{ conversation_id: string; recipient_binding_id: string }>(`SELECT m.conversation_id,m.recipient_binding_id FROM messages m
-        JOIN bindings r ON r.id=m.recipient_binding_id WHERE m.id=$1 AND r.owner_id=$2 AND m.approval='pending' FOR UPDATE OF m`, [messageId, ownerId]);
+        JOIN bindings holder ON holder.id=CASE WHEN m.held_for='sender' THEN m.sender_binding_id ELSE m.recipient_binding_id END
+        WHERE m.id=$1 AND holder.owner_id=$2 AND m.approval='pending' FOR UPDATE OF m`, [messageId, ownerId]);
       const row = found.rows[0];
       if (!row) throw new RelayError('not_found', 'Not found', 404);
       const c = (await client.query<Conversation>('SELECT * FROM conversations WHERE id=$1', [row.conversation_id])).rows[0]!;
@@ -258,6 +268,14 @@ export class Relay {
     return this.run(async client => {
       const me = await this.auth(client, token);
       const c = await this.conversation(client, me, data.conversationId);
+      const occupied = await client.query<{ conversation_id: string }>(
+        "SELECT t.conversation_id FROM turns t JOIN bindings b ON b.id=t.binding_id WHERE b.runtime_scope=$1 AND t.status IN ('active','uncertain') LIMIT 1",
+        [me.runtimeScope],
+      );
+      if (occupied.rows[0] && occupied.rows[0].conversation_id !== c.id) throw new RelayError('runtime_busy');
+      const peerId = c.binding_a === me.id ? c.binding_b : c.binding_a;
+      await client.query(`INSERT INTO conversation_reads(binding_id, peer_binding_id, read_at) VALUES($1,$2,clock_timestamp())
+        ON CONFLICT (binding_id, peer_binding_id) DO UPDATE SET read_at=EXCLUDED.read_at`, [me.id, peerId]);
       // Held or declined input stays invisible to the receiving agent.
       const messages = await client.query<Message & { approval: string }>(`SELECT ${messageColumns}, approval FROM messages WHERE conversation_id=$1 AND sequence>$2 AND (approval IN ('none','approved') OR sender_binding_id=$4) ORDER BY sequence LIMIT $3`, [c.id, data.afterSequence, data.limit, me.id]);
       const turns = await client.query<{ id: string; status: string; leaseExpiresAt: Date; result: string | null }>('SELECT id,status,lease_expires_at AS "leaseExpiresAt",result FROM turns WHERE conversation_id=$1 ORDER BY created_at LIMIT 12', [c.id]);
