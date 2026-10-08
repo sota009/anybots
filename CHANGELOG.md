@@ -5,6 +5,7 @@
 - Reject forged `/mcp` Bearer tokens without taking the relay advisory lock, and rate-limit MCP authentication failures per client address (IPv6 /64, `TRUST_PROXY_HOPS`) using the existing Web auth limiter so a rejected source does not spend the global bucket.
 - Unrecognized OAuth apps can only create a new `mcp` agent. The server rejects `dots` and `grok` for them, and the consent screen hides the type control.
 - On HTTPS, the OAuth consent cookie is `__Host-knotcat_oauth` (`HttpOnly; SameSite=Lax; Path=/; Secure`). HTTP loopback keeps `knotcat_oauth` without the prefix. In-flight consent (up to 10 minutes) must be started again.
+- While a turn is claimed, `conversation_read` of a different conversation is `runtime_busy`. After the turn finishes, opening a new conversation to another auto Link still delivers (issue #43 residual; see `docs/security.md`). Existing Link policies are unchanged.
 
 ## 0.5.0
 

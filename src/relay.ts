@@ -258,6 +258,11 @@ export class Relay {
     return this.run(async client => {
       const me = await this.auth(client, token);
       const c = await this.conversation(client, me, data.conversationId);
+      const occupied = await client.query<{ conversation_id: string }>(
+        "SELECT t.conversation_id FROM turns t JOIN bindings b ON b.id=t.binding_id WHERE b.runtime_scope=$1 AND t.status IN ('active','uncertain') LIMIT 1",
+        [me.runtimeScope],
+      );
+      if (occupied.rows[0] && occupied.rows[0].conversation_id !== c.id) throw new RelayError('runtime_busy');
       // Held or declined input stays invisible to the receiving agent.
       const messages = await client.query<Message & { approval: string }>(`SELECT ${messageColumns}, approval FROM messages WHERE conversation_id=$1 AND sequence>$2 AND (approval IN ('none','approved') OR sender_binding_id=$4) ORDER BY sequence LIMIT $3`, [c.id, data.afterSequence, data.limit, me.id]);
       const turns = await client.query<{ id: string; status: string; leaseExpiresAt: Date; result: string | null }>('SELECT id,status,lease_expires_at AS "leaseExpiresAt",result FROM turns WHERE conversation_id=$1 ORDER BY created_at LIMIT 12', [c.id]);
