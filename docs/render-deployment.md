@@ -104,7 +104,7 @@ GrokのWebhookは引き続き実験扱いです。URLとキーは利用者がWeb
 
 上の表の値はこの文書の記録であり、この変更ではデプロイ設定を書き換えません。プロセス側の既定と、運営が後から決める項目は次のとおりです。
 
-- **DB TLS**：`NODE_ENV=production` かつ DB ホストが loopback でないとき、`DATABASE_URL` に `sslmode=require`（または `verify-ca` / `verify-full`）が必要です。無いと起動しません。Render が付与する内部 URL に既に含まれているかは、デプロイ前に運営が確認します（値は会話や Git に貼りません）。
+- **DB TLS**：`NODE_ENV=production` かつ DB ホストが loopback でないとき、`DATABASE_URL` に `sslmode=require`（または `verify-ca` / `verify-full`）が無いと警告します（ホスト種別だけ。URL は出しません）。既定は起動します。拒否するには任意の `DATABASE_REQUIRE_TLS=true`（表には足さない。未設定のまま）。Render 内部 URL は sslmode なしが普通なので、フラグを立てる前に運営が形を確認します（値は会話や Git に貼りません）。
 - **`statement_timeout`**：API・migrate・admin の Pool が 30 秒を付けます。環境変数ではありません。
 - **HSTS**：公開 HTTPS では `max-age=31536000; includeSubDomains`。`preload` は付けません。公開リストへの登録は別判断です。
 - **`DOTS_WEBHOOK_PATH_PREFIX`**：未設定が既定です。ChatGPT のコールバックパスは資料に残していないので、値を推測して表へ足しません。実購読でパス接頭辞を確認してから設定します。確認するまで dots はホスト許可のみです。パス・クエリ・署名キーは issue やチャットへ貼りません。

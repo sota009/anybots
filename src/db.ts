@@ -23,12 +23,20 @@ export const STATEMENT_TIMEOUT_MS = 30_000;
 const TLS_SSLMODES = new Set(['require', 'verify-ca', 'verify-full']);
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1']);
 
+function hostKind(hostname: string): 'loopback' | 'internal-style' | 'public-style' {
+  if (LOOPBACK.has(hostname)) return 'loopback';
+  return hostname.includes('.') ? 'public-style' : 'internal-style';
+}
+
 export function poolConfig(connectionString: string, env: NodeJS.ProcessEnv = process.env): PoolConfig {
   let parsed: URL;
   try { parsed = new URL(connectionString); } catch { throw new Error('DATABASE_URL is invalid'); }
   const sslmode = parsed.searchParams.get('sslmode')?.toLowerCase();
-  if (env.NODE_ENV === 'production' && !LOOPBACK.has(parsed.hostname) && !TLS_SSLMODES.has(sslmode ?? '')) {
-    throw new Error('DATABASE_URL must include sslmode=require (or verify-ca/verify-full) when NODE_ENV=production and the host is not loopback');
+  const kind = hostKind(parsed.hostname);
+  if (env.NODE_ENV === 'production' && kind !== 'loopback' && !TLS_SSLMODES.has(sslmode ?? '')) {
+    const message = `DATABASE_URL has no sslmode=require (or verify-ca/verify-full) for a non-loopback production host (${kind}). Startup continues unless DATABASE_REQUIRE_TLS=true.`;
+    if (env.DATABASE_REQUIRE_TLS === 'true') throw new Error(message);
+    console.warn(message);
   }
   return { connectionString, statement_timeout: STATEMENT_TIMEOUT_MS };
 }
