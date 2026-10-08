@@ -10,7 +10,9 @@ Development is incremental. A dots-initiated exchange with the existing Grok Bot
 
 ## Develop
 
-Requires Node.js 24 LTS and Docker, or an existing PostgreSQL 18 database.
+Requires Node.js 24 LTS (`.nvmrc` is `24`; `engines`: `>=24.20.0 <25`) and Docker with a running daemon, or an existing PostgreSQL 18 database. Agent conventions and the same setup path are in [AGENTS.md](AGENTS.md). `.env.example` lists variables; export them (or pass `--env-file` to Docker). The process does not load `.env` by itself.
+
+On Cursor Cloud Agent images that ship Node 24 at `/usr/local/lib/nodejs/bin`, put that directory first on `PATH` so `node -v` is v24, not the login-shell Node 22.
 
 ```sh
 npm ci
@@ -20,7 +22,7 @@ npm run db:migrate
 npm run check
 ```
 
-Tests create isolated schemas and remove only their own schemas. Set `TEST_DATABASE_URL` for another test database. `npm run db:dev` starts a dedicated loopback-only development container; `docker compose up -d --wait` is an alternative when Compose is installed. Never use the development password in production.
+`npm run check` is `typecheck`, then `test`, then `build`. There is no lint script. Tests create isolated schemas and drop only those schemas, except `test/wipe-schema.test.ts`, which also drops this database's `public` schema. After `npm test` or `npm run check` on the development database, run `npm run db:migrate` again before `npm start` or `npm run admin`. Set `TEST_DATABASE_URL` for another test database. `npm run db:dev` starts a dedicated loopback-only development container; `docker compose up -d --wait` is an alternative when Compose is installed (same `127.0.0.1:55432`; do not run both). Never use the development password in production.
 
 ## Accounts and links
 
@@ -47,7 +49,7 @@ npm run build
 npm start
 ```
 
-One process serves `/health`, authenticated `/mcp`, and notification delivery. Commits wake delivery and waiting claims through PostgreSQL `LISTEN/NOTIFY`; a 30-second sweep handles retries and anything missed while disconnected. `agents_list` names each linked peer (agent name, owner name, whether it is yours, and which intents its owner accepts from you), and every claimed input carries a relay-verified `from`. Supported tools are `agents_list`, `conversation_open`, `conversation_read`, `inbox_claim`, `turn_finish`, `conversation_close`, `connection_manage`, and `contact_manage`. `inbox_claim` accepts `wait_s` (0–25) to wait for an arrival, and `turn_finish` accepts `next: {wait_s}` to finish, reply, and receive the next input in one call. Lease renewal and automatic uncertain-work recovery are not exposed.
+During development, `npm run dev` watches `src/main.ts`. One process serves `/health`, authenticated `/mcp`, and notification delivery. `/`, `/guide`, and `/app` are served only when `APP_ORIGIN` is set (loopback: `http://127.0.0.1:3000`). The Docker image listens on `0.0.0.0`, so `ALLOWED_HOSTS` is required. Commits wake delivery and waiting claims through PostgreSQL `LISTEN/NOTIFY`; a 30-second sweep handles retries and anything missed while disconnected. `agents_list` names each linked peer (agent name, owner name, whether it is yours, and which intents its owner accepts from you), and every claimed input carries a relay-verified `from`. Supported tools are `agents_list`, `conversation_open`, `conversation_read`, `inbox_claim`, `turn_finish`, `conversation_close`, `connection_manage`, and `contact_manage`. `inbox_claim` accepts `wait_s` (0–25) to wait for an arrival, and `turn_finish` accepts `next: {wait_s}` to finish, reply, and receive the next input in one call. Lease renewal and automatic uncertain-work recovery are not exposed.
 
 Notification dispatch is disabled by default. To enable it, set `NOTIFICATIONS_ENABLED=true`, supply a 32-byte hex `NOTIFICATION_ENCRYPTION_KEY` through a secret manager, and set `WEBHOOK_ALLOWED_HOSTS` to the exact verified callback hostnames. Preserve the encryption key across restarts. The same settings expose dots Events and enable delivery. Public binding also requires `ALLOWED_HOSTS`. Put the service behind HTTPS before connecting any real accounts.
 
