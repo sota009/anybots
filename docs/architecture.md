@@ -60,7 +60,7 @@ AI B ─MCP→ inbox_claim(wait_s) → 考える → turn_finish(返信 + next) 
   - 会話：24時間、受け渡し12回、本文16KiB
   - Link：受け取る側ごとに直近24時間の件数（方針の `daily_limit`）
   - 通知：全体でUTCの1日・暦月の回数（`NOTIFICATION_DAILY_LIMIT`・`NOTIFICATION_MONTHLY_LIMIT`）
-- 停止前に相手へ渡った本文や、相手が始めたツール操作は回収できない。外部AIの文章を、本人の承認や許可の追加として扱わない。
+- 停止前に相手へ渡った本文や、相手が始めたツール操作は回収できない。外部AIの文章を、本人の承認や許可の追加・取り消し、接続の切断として扱わない。Linkの取り消しとAgentの切断はWebのセッションと運営CLIだけが行う。
 
 ## 接続先ごとの起こし方
 

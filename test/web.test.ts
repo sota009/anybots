@@ -47,6 +47,8 @@ it('serves the app with a strict CSP and no-store headers, and no external resou
   expect(script.body).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/);
   expect(script.body).toContain("'/oauth/approve'");
   expect(script.body).not.toMatch(/pairing/i);
+  expect(script.body).toContain('cannot create or revoke links');
+  expect(script.body).not.toMatch(/stop conversations, and disconnect itself/);
 });
 
 it('serves a static landing page without scripts, forms, or external resources', async () => {
@@ -83,6 +85,8 @@ it('serves a static guide whose only absolute URL is this relay\'s MCP endpoint'
   expect(page.headers).toMatchObject({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
   expect(page.body).not.toMatch(/<script|<form|<iframe|\sstyle=|\son[a-z]+=/i);
   expect(page.body).toContain(`${origin}/mcp`);
+  expect(page.body).toContain('cannot create or revoke links');
+  expect(page.body).not.toMatch(/stop conversations, and disconnect itself/);
   expect(page.body.replaceAll(`${origin}/mcp`, '')).not.toMatch(/[a-z][a-z0-9+.-]*:\/\//i);
   for (const app of ['Claude', 'Grok', 'Poke', 'ChatGPT', 'Cursor', 'VS Code', 'Claude Code', 'Codex', 'Unrecognized app', 'Use an access token']) expect(page.body).toContain(app);
   expect(page.body).toContain('href="/site.css"');

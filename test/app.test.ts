@@ -62,8 +62,12 @@ describe('authenticated stateless MCP over PostgreSQL', () => {
     const listed = await alice.listTools();
     expect(listed.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
       'agents_list', 'conversation_open', 'conversation_read', 'conversation_close',
-      'inbox_claim', 'turn_finish', 'connection_manage', 'contact_manage',
+      'inbox_claim', 'turn_finish', 'connection_manage',
     ]));
+    expect(listed.tools.map((tool) => tool.name)).not.toContain('contact_manage');
+    expect(listed.tools.find((tool) => tool.name === 'connection_manage')!.inputSchema.properties).toEqual(
+      expect.objectContaining({ action: expect.objectContaining({ enum: ['status'] }) }),
+    );
     const openSchema = listed.tools.find((tool) => tool.name === 'conversation_open')!.inputSchema;
     expect(openSchema.additionalProperties).toBe(false);
     expect(openSchema.properties).not.toHaveProperty('sender_binding_id');
@@ -159,12 +163,14 @@ describe('authenticated stateless MCP over PostgreSQL', () => {
     const grantAttempt = await rpc(a.token, 'contact_manage', { action: 'grant', recipient_binding_id: outsider.bindingId });
     expect(grantAttempt.payload.error ?? grantAttempt.payload.result?.isError).toBeTruthy();
     const revoked = await rpc(a.token, 'contact_manage', { action: 'revoke', recipient_binding_id: b.bindingId });
-    expect(revoked.payload.result?.isError).not.toBe(true);
-    expect(await relay.agentsList(a.token)).toEqual([]);
+    expect(revoked.payload.error ?? revoked.payload.result?.isError).toBeTruthy();
+    expect((await relay.agentsList(a.token)).map((agent) => agent.id)).toEqual([b.bindingId]);
     const disabled = await rpc(a.token, 'connection_manage', { action: 'disable' });
-    expect(disabled.payload.result?.isError).not.toBe(true);
-    expect((await rpc(a.token, 'agents_list')).response.statusCode).toBe(401);
+    expect(disabled.payload.error ?? disabled.payload.result?.isError).toBeTruthy();
+    expect((await rpc(a.token, 'agents_list')).response.statusCode).toBe(200);
     expect((await rpc(b.token, 'agents_list')).response.statusCode).toBe(200);
+    const status = await rpc(a.token, 'connection_manage', { action: 'status' });
+    expect(status.payload.result?.isError).not.toBe(true);
   });
 
   it('rejects hostile Host and Origin headers and oversized bodies', async () => {

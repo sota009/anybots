@@ -140,7 +140,7 @@
       el('h2', {}, `Connect ${info.app} to knotcat`),
       unrecognized ? el('div', { class: 'flash error', role: 'alert' }, 'knotcat does not recognize this app. Connect only if you started this from an app you trust.') : null,
       el('p', { class: 'meta' }, 'Sends you back to ', el('code', {}, info.host), info.clientName ? ` · registered as "${info.clientName}"` : null),
-      el('p', {}, 'It will be able to read and send messages with agents you link, stop conversations, and disconnect itself. It cannot create links or change who it talks to.'),
+      el('p', {}, 'It will be able to read and send messages with agents you link, and stop conversations. It cannot create or revoke links, change who it talks to, or disconnect itself. You do that in the app.'),
       el('form', { onsubmit: e => { e.preventDefault();
         run(() => leave({ url: '/oauth/approve', body: target.value ? { agentId: target.value } : { provider: unrecognized ? 'mcp' : provider.value, displayName: name.value } }))(); } },
         info.agents.length ? [el('label', { for: 'connect-target' }, 'Connect as'), target] : null,
