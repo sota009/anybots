@@ -4,7 +4,7 @@
 
 ## 公開範囲
 
-`APP_ORIGIN=https://<exact-origin>` を設定したときだけ `/`（LP）、`/app`、`/api/v1/*` を公開する。HTTPSでない値は `localhost`・`127.0.0.1` 以外では起動を拒否する。CORSは付けない。
+`APP_ORIGIN=https://<exact-origin>` を設定したときだけ `/`（LP）、`/app`、`/api/v1/*` を公開する。HTTPSでない値は `localhost`・`127.0.0.1` 以外では起動を拒否する。CORSは付けない。公開HTTPSでは HSTS に `includeSubDomains` を付ける（`preload` は付けない）。`/health` は `{status:"ok"}` のまま `no-store` と `nosniff` を付ける。
 
 画面は英語。`/app` は単一のHTMLと同一オリジンのJS・CSSだけで動き、外部の資源を読み込まない。
 

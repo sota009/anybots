@@ -6,7 +6,7 @@ import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { Relay, RelayError } from './relay.js';
 import { EventError } from './events.js';
-import { clientAddress, registerWeb, type WebOptions } from './web.js';
+import { clientAddress, HSTS, registerWeb, type WebOptions } from './web.js';
 
 const MAX_HTTP_BODY_BYTES = 128 * 1024;
 const id = z.uuid();
@@ -81,7 +81,11 @@ export function buildApp(relay: Relay, options: AppOptions = {}) {
     const status = typeof candidate === 'number' && candidate >= 400 && candidate < 500 ? candidate : 500;
     return reply.code(status).send({ error: status === 413 ? 'body_too_large' : status === 400 ? 'invalid_request' : 'request_failed' });
   });
-  app.get('/health', async () => ({ status: 'ok' }));
+  app.get('/health', async (_request, reply) => {
+    reply.header('Cache-Control', 'no-store').header('X-Content-Type-Options', 'nosniff');
+    if (options.web?.origin.startsWith('https://')) reply.header('Strict-Transport-Security', HSTS);
+    return { status: 'ok' };
+  });
 
   const trustProxyHops = options.trustProxyHops ?? options.web?.trustProxyHops ?? 0;
   const unauthorized = (reply: FastifyReply) => reply.header('WWW-Authenticate', challenge).code(401).send({ error: 'unauthorized' });

@@ -36,11 +36,22 @@ async function signup(name = 'Ada', ip = '198.51.100.7') {
   return { verified, cookie: String(verified.headers['set-cookie']).split(';')[0]!, passkey };
 }
 
+it('sends HSTS includeSubDomains on public HTTPS and hardens /health without changing its JSON', async () => {
+  const page = await app.inject({ url: '/app', headers: { host } });
+  expect(page.headers['strict-transport-security']).toBe('max-age=31536000; includeSubDomains');
+  const health = await app.inject({ url: '/health', headers: { host } });
+  expect(health.statusCode).toBe(200);
+  expect(health.json()).toEqual({ status: 'ok' });
+  expect(health.headers['cache-control']).toBe('no-store');
+  expect(health.headers['x-content-type-options']).toBe('nosniff');
+  expect(health.headers['strict-transport-security']).toBe('max-age=31536000; includeSubDomains');
+});
+
 it('serves the app with a strict CSP and no-store headers, and no external resources', async () => {
   const page = await app.inject({ url: '/app', headers: { host } });
   expect(page.statusCode).toBe(200);
   expect(page.headers['content-security-policy']).toBe("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
-  expect(page.headers).toMatchObject({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'strict-transport-security': 'max-age=31536000' });
+  expect(page.headers).toMatchObject({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'strict-transport-security': 'max-age=31536000; includeSubDomains' });
   expect(page.body).not.toMatch(/https?:\/\/|<script>|style=/);
   const script = await app.inject({ url: '/app/app.js', headers: { host } });
   expect(script.headers['content-type']).toContain('text/javascript');

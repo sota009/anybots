@@ -6,6 +6,9 @@
 - Unrecognized OAuth apps can only create a new `mcp` agent. The server rejects `dots` and `grok` for them, and the consent screen hides the type control.
 - On HTTPS, the OAuth consent cookie is `__Host-knotcat_oauth` (`HttpOnly; SameSite=Lax; Path=/; Secure`). HTTP loopback keeps `knotcat_oauth` without the prefix. In-flight consent (up to 10 minutes) must be started again.
 - While a turn is claimed, `conversation_read` of a different conversation is `runtime_busy`. After `conversation_read` of peer X, a send to a different peer Y within 10 minutes is held for the sending owner's approval (issue #43). Same-peer auto delivery and existing Link `ask=auto` are unchanged. Forwarding a claimed body without `conversation_read` is still delivered.
+- Production, non-loopback `DATABASE_URL` must include `sslmode=require` (or `verify-ca` / `verify-full`). Pools set `statement_timeout` to 30 seconds. Migrator vs runtime DB roles stay a documented operator step.
+- Public HTTPS sends `Strict-Transport-Security: max-age=31536000; includeSubDomains` (no `preload`). `/health` keeps `{status:"ok"}` and adds `no-store` and `nosniff`.
+- Optional `DOTS_WEBHOOK_PATH_PREFIX` restricts dots callbacks like Grok's `/automations/webhook/`. Default is unset; the live ChatGPT path was not recorded.
 
 ## 0.5.0
 

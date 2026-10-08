@@ -1,9 +1,10 @@
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
-import pg from 'pg';
+import type { Pool } from 'pg';
+import { createPool } from './db.js';
 
 /** One-shot operator wipe for empty-schema cutovers. Requires ALLOW_SCHEMA_WIPE=true. */
-export async function wipePublicSchema(pool: pg.Pool): Promise<void> {
+export async function wipePublicSchema(pool: Pool): Promise<void> {
   if (process.env.ALLOW_SCHEMA_WIPE !== 'true') {
     throw new Error('ALLOW_SCHEMA_WIPE must be true');
   }
@@ -15,7 +16,7 @@ export async function wipePublicSchema(pool: pg.Pool): Promise<void> {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = createPool(process.env.DATABASE_URL);
   try {
     await wipePublicSchema(pool);
     console.log(JSON.stringify({ status: 'wiped' }));

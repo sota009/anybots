@@ -94,6 +94,13 @@ callback path, query, and signing secret are not needed for host diagnostics and
 must not be copied into chat or logs. Until that host is permitted and the signed
 challenge succeeds, event delivery is not connected.
 
+Grok webhooks require the path prefix `/automations/webhook/` on `api2.cursor.sh`.
+dots callbacks may use `DOTS_WEBHOOK_PATH_PREFIX` the same way. The default is
+unset because the live ChatGPT path was not recorded; do not invent one. With the
+variable unset, only the hostname allowlist applies. Set the prefix only after
+observing it from a real subscription, and never paste the full URL into issues
+or chat.
+
 We verify callbacks with a signed, random, single-use challenge before storing an
 active subscription. A successful verification is cached for at most one minute,
 scoped to binding, callback URL, and signing key, with a bounded cache size. After

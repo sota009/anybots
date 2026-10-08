@@ -16,6 +16,14 @@ describe('provider transport boundaries', () => {
     }
     expect(validateWebhookUrl('https://example.com/callback', ['example.com']).hostname).toBe('example.com');
   });
+  it('rejects an allowed-host webhook whose path is outside a configured prefix', () => {
+    const hosts = ['example.com'];
+    for (const url of ['https://example.com/other', 'https://example.com/webhooks/', 'https://example.com/webhooks/id?x=1', 'https://example.com/webhooks-extra/id']) {
+      expect(() => validateWebhookUrl(url, hosts, '/webhooks/')).toThrow();
+    }
+    expect(validateWebhookUrl('https://example.com/webhooks/id', hosts, '/webhooks/').pathname).toBe('/webhooks/id');
+    expect(validateWebhookUrl('https://example.com/other', hosts).pathname).toBe('/other');
+  });
   it('rejects oversized payloads before DNS or network', async () => {
     const transport = new PublicHttpsTransport(['example.com']);
     await expect(transport.post('https://example.com', 'x'.repeat(262_145), {})).rejects.toThrow('webhook_payload_too_large');

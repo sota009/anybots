@@ -55,6 +55,14 @@ describe('authenticated stateless MCP over PostgreSQL', () => {
     return JSON.parse((result as { content: { text: string }[] }).content[0]!.text);
   }
 
+  it('returns /health JSON with nosniff and no-store without changing the body', async () => {
+    const health = await app.inject({ url: '/health' });
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toEqual({ status: 'ok' });
+    expect(health.headers['cache-control']).toBe('no-store');
+    expect(health.headers['x-content-type-options']).toBe('nosniff');
+  });
+
   it('connects official clients, lists strict schemas, and completes a persisted round trip', async () => {
     const alice = await connect(a.token);
     expect(alice.getServerVersion()?.name).toBe('knotcat');

@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import pg from 'pg';
 import { z } from 'zod';
+import { createPool } from './db.js';
 import { Relay } from './relay.js';
 import { Accounts } from './accounts.js';
 import { oauthFromEnvironment } from './oauth-config.js';
@@ -45,9 +45,9 @@ export async function admin(
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL required');
+  const pool = createPool(process.env.DATABASE_URL);
   try {
-    if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL required');
     let raw = '';
     for await (const chunk of process.stdin) {
       raw += String(chunk);

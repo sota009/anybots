@@ -8,6 +8,7 @@ import type { Network } from './network.js';
 import type { OAuthPilot } from './oauth.js';
 import { AUTH_ATTEMPT_LIMITS } from './rates.js';
 
+export const HSTS = 'max-age=31536000; includeSubDomains';
 const SITE_CSP = "default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const AUTH_LIMITS = AUTH_ATTEMPT_LIMITS;
@@ -82,7 +83,7 @@ export function registerWeb(app: FastifyInstance, options: WebOptions) {
     routes.addHook('onRequest', async (request, reply) => {
       reply.header('Cache-Control', 'no-store').header('X-Content-Type-Options', 'nosniff').header('Referrer-Policy', 'no-referrer')
         .header('Cross-Origin-Opener-Policy', 'same-origin').header('Cross-Origin-Resource-Policy', 'same-origin');
-      if (secure) reply.header('Strict-Transport-Security', 'max-age=31536000');
+      if (secure) reply.header('Strict-Transport-Security', HSTS);
       if (request.method === 'GET' || request.method === 'HEAD') return;
       // CSRF: exact origin and a JSON body, in addition to SameSite=Lax.
       const type = request.headers['content-type'] ?? '';
