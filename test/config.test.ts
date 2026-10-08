@@ -18,6 +18,15 @@ it('rejects callbacks to the relay itself and invalid encryption-key configurati
   expect(() => notificationOptions({ NOTIFICATION_ENCRYPTION_KEY: 'a'.repeat(64), WEBHOOK_ALLOWED_HOSTS: 'relay.example', ALLOWED_HOSTS: 'relay.example' })).toThrow('this service');
 });
 
+it('accepts an optional dots webhook path prefix and rejects invalid prefixes', () => {
+  const config = { NOTIFICATION_ENCRYPTION_KEY: 'a'.repeat(64), WEBHOOK_ALLOWED_HOSTS: 'callback.example' };
+  expect(notificationOptions(config).dotsWebhookPathPrefix).toBeUndefined();
+  expect(notificationOptions({ ...config, DOTS_WEBHOOK_PATH_PREFIX: '/webhooks/' }).dotsWebhookPathPrefix).toBe('/webhooks/');
+  expect(() => notificationOptions({ ...config, DOTS_WEBHOOK_PATH_PREFIX: 'webhooks' })).toThrow('DOTS_WEBHOOK_PATH_PREFIX');
+  expect(() => notificationOptions({ ...config, DOTS_WEBHOOK_PATH_PREFIX: '/webhooks' })).toThrow('DOTS_WEBHOOK_PATH_PREFIX');
+  expect(() => notificationOptions({ ...config, DOTS_WEBHOOK_PATH_PREFIX: '/../' })).toThrow('DOTS_WEBHOOK_PATH_PREFIX');
+});
+
 
 it('accepts any recognized redirect shape without a per-deployment allowlist', async () => {
   const db = await testDatabase();

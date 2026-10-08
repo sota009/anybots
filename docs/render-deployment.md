@@ -102,6 +102,25 @@ APIは`node dist/main.js`で起動します。MCP、Webアプリ、通知の配�
 
 GrokのWebhookは引き続き実験扱いです。URLとキーは利用者がWebアプリで登録し、DBに暗号化して保存されます。Render Secret Fileや`GROK_CONFIG_FILE`は使いません。dotsの通知先は購読時に提供されるため、利用者に通知URLをチャットへ貼ってもらう手順にはしません。設定済みの表示だけでは、Grokが通知を受理したことや、自動返信できたことを証明しません。
 
+上の表の値はこの文書の記録であり、この変更ではデプロイ設定を書き換えません。プロセス側の既定と、運営が後から決める項目は次のとおりです。
+
+- **DB TLS**：`NODE_ENV=production` かつ DB ホストが loopback でないとき、`DATABASE_URL` に `sslmode=require`（または `verify-ca` / `verify-full`）が無いと警告します（ホスト種別だけ。URL は出しません）。既定は起動します。拒否するには任意の `DATABASE_REQUIRE_TLS=true`（表には足さない。未設定のまま）。Render 内部 URL は sslmode なしが普通なので、フラグを立てる前に運営が形を確認します（値は会話や Git に貼りません）。
+- **`statement_timeout`**：API・migrate・admin の Pool が 30 秒を付けます。環境変数ではありません。
+- **HSTS**：公開 HTTPS では `max-age=31536000; includeSubDomains`。`preload` は付けません。公開リストへの登録は別判断です。
+- **`DOTS_WEBHOOK_PATH_PREFIX`**：未設定が既定です。ChatGPT のコールバックパスは資料に残していないので、値を推測して表へ足しません。実購読でパス接頭辞を確認してから設定します。確認するまで dots はホスト許可のみです。パス・クエリ・署名キーは issue やチャットへ貼りません。
+
+## migrator と runtime の DB ロール
+
+プロセスは単一の `DATABASE_URL` を migrate と実行で共有します。最小権限にするなら、運営が Render 上でロールを分けます（この変更では作成しません）。
+
+1. PostgreSQL に migrator 用ログイン（DDL）と runtime 用ログイン（DML のみ）を作る。パスワードはホストの秘密ストアだけに置く
+2. migrator に対象スキーマの `CREATE` と既存オブジェクトの変更を許可する。公開前処理の `node dist/migrate.js` だけがこの URL を使う
+3. runtime には `CONNECT`、スキーマの `USAGE`、アプリケーション表の `SELECT` / `INSERT` / `UPDATE` / `DELETE`、シーケンスの `USAGE` / `SELECT` だけを許可する。`CREATE` と `DROP` は与えない。`node dist/main.js` と `node dist/admin.js` はこの URL を `DATABASE_URL` にする
+4. 以後の表にも同じ権限が付くよう `ALTER DEFAULT PRIVILEGES` を migrator 側で設定する
+5. 反映後、runtime の URL で migrate が失敗し、通常の API 操作が成功することを確認する。失敗した接続文字列は記録しない
+
+Render 管理 Postgres の既定は単一ユーザーです。ロール追加と内部接続の可否は、反映前に運営が Render の現行仕様で確認します。
+
 ## 完了条件
 
 公開URLの`/health`が成功しても、AI同士の連携が完了したとは扱いません。未認証の`/mcp`が拒否され、両方の実アカウントでOAuth接続が通り、通知から受信、返信、元のAIの再開まで確認する必要があります。

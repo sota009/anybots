@@ -21,6 +21,18 @@ export function notificationOptions(env: NodeJS.ProcessEnv = process.env): Provi
     }
     oauthResource = `${issuer.origin}/mcp`;
   }
+  const dotsPrefix = dotsWebhookPathPrefix(env);
   return { encryptionKey: Buffer.from(rawKey, 'hex'), transport: new PublicHttpsTransport(hosts), webhookHosts: hosts, grokExperimental,
-    ...(oauthResource ? { oauthResource } : {}) };
+    ...(oauthResource ? { oauthResource } : {}), ...(dotsPrefix ? { dotsWebhookPathPrefix: dotsPrefix } : {}) };
+}
+
+/** Absolute path prefix ending with `/`. Unset means host allowlist only; do not guess ChatGPT's path. */
+export function dotsWebhookPathPrefix(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const raw = env.DOTS_WEBHOOK_PATH_PREFIX?.trim();
+  if (!raw) return undefined;
+  if (raw.includes('..') || raw.includes('//') || raw.includes('?') || raw.includes('#')
+      || raw.length > 256 || !/^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*\/$/.test(raw)) {
+    throw new Error('DOTS_WEBHOOK_PATH_PREFIX must be an absolute URL path prefix ending with /');
+  }
+  return raw;
 }

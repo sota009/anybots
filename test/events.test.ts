@@ -71,6 +71,15 @@ describe('persistent event subscriptions', () => {
     expect(JSON.parse(call[1])).toMatchObject({ eventId: notification.id, timestamp: notification.occurredAt });
     expect((await pool.query('SELECT active FROM event_subscriptions')).rows[0].active).toBe(false);
   });
+  it('does not POST a dots callback whose path is outside the configured prefix', async () => {
+    events = new EventSubscriptions(pool, { encryptionKey: key, transport: { post }, dotsWebhookPathPrefix: '/webhooks/' });
+    await expect(events.subscribe(binding, { ...input(), delivery: { ...input().delivery, url: 'https://callbacks.example.com/other' } }))
+      .rejects.toMatchObject({ reason: 'challenge_failed' });
+    expect(post).not.toHaveBeenCalled();
+    await expect(events.subscribe(binding, { ...input(), delivery: { ...input().delivery, url: 'https://callbacks.example.com/webhooks/sub' } }))
+      .resolves.toHaveProperty('id');
+    expect(post).toHaveBeenCalledOnce();
+  });
   it('rejects malformed secrets and unsupported filters without network calls', async () => {
     await expect(events.subscribe(binding, { ...input(), arguments: { owner: 'victim' } })).rejects.toMatchObject({ code: -32602 });
     await expect(events.subscribe(binding, { ...input(), delivery: { ...input().delivery, secret: 'whsec_short' } })).rejects.toMatchObject({ code: -32602 });

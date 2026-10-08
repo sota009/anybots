@@ -18,6 +18,12 @@ provider. The operator verifies its ownership before adding that exact hostname
 to both services' `WEBHOOK_ALLOWED_HOSTS`; there is no automatic allowlisting.
 The usual authentication, authority checks, callback verification budget, DNS
 validation, pinned TLS connection, and challenge verification still apply.
+An optional `DOTS_WEBHOOK_PATH_PREFIX` (absolute path ending in `/`) rejects
+other paths on an allowed host before the verification POST, the same way Grok
+requires `/automations/webhook/`. The default is unset: host matching only.
+The real ChatGPT callback path was not retained in diagnostics, so the process
+does not guess a prefix. Confirm it from a live subscription before relying on
+the restriction in production. The path is still never returned in errors or logs.
 
 Regression coverage must exercise the actual HTTP MCP error envelope, confirm
 that rejected subscriptions are not persisted, and check that URL and signing

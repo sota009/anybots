@@ -6,7 +6,7 @@
 
 参考書はMalcolm McDonald著『実践理解！Webアプリケーションセキュリティ』日本語版、2026年、原著2024年です。提供PDFは317ページで、本文の印刷ページに16を加えるとPDFページになります。以下は要約を再配布する資料ではなく、実装に適用する判断と検証記録です。PDF全文や購入者情報はリポジトリへ保存しません。
 
-2026年10月3日、Composio経由のExaで[OWASP ASVS 5.0](https://owasp.org/projects/asvs)、[SSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)、[APIの資源消費制限](https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/)、[OAuthのRFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)も確認しました。書籍の原則と現行仕様が食い違う場合は、一次資料と実装試験を根拠に判断します。
+2026年10月3日、Composio経由のExaで[OWASP ASVS 5.0](https://owasp.org/projects/asvs)、[SSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)、[APIの資源消費制限](https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/)、[OAuthのRFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)も確認しました。2026年10月8日、[MDN の HSTS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security)（`includeSubDomains` と preload の条件）と [node-postgres の Client / SSL](https://node-postgres.com/apis/client)（`statement_timeout` と接続文字列の `sslmode`）を現行一次資料として確認しました。書籍の原則と現行仕様が食い違う場合は、一次資料と実装試験を根拠に判断します。
 
 ## 資産と信頼境界
 
@@ -22,12 +22,12 @@
 | 多層防御・最小権限、4章76〜79頁 | 非root実行、私設DB接続、完全一致のホスト許可、認証後も操作ごとに認可する | `Dockerfile`、`src/main.ts`、`src/relay.ts` |
 | レビュー・自動化・監査、5章81〜102頁 | 資料、失敗テスト、実装、独立レビューの順で変更する。本文や資格情報をログに出さない | CI、配送試行記録、PR |
 | XSS・CSRF・クリックジャッキング、6章105〜130頁 | 同意画面はWebアプリ（CSP `script-src 'self'`、`textContent` で描画）。許可のAPIはセッション、完全一致のOrigin、要求トークン、要求に結び付いたHttpOnly Cookieの照合で守る。HTTPSの同意Cookieはセッションと同じ `__Host-`（`Secure`・`Path=/`・`Domain`なし） | `src/oauth.ts`、`web/app.js`、`test/oauth.test.ts`、`test/web.test.ts` |
-| TLSと鍵、3章41〜56頁・7章131〜152頁 | 公開HTTPS、Webhookの証明書検証、DB保存秘密値の認証付き暗号化を使う | `src/providers/crypto.ts`、`src/providers/transport.ts` |
+| TLSと鍵、3章41〜56頁・7章131〜152頁 | 公開HTTPS、Webhookの証明書検証、DB保存秘密値の認証付き暗号化を使う。本番の非 loopback `DATABASE_URL` に `sslmode=require`（または `verify-ca` / `verify-full`）が無いときは警告する（既定は起動継続。`DATABASE_REQUIRE_TLS=true` のときだけ拒否）。Pool は `statement_timeout=30s` | `src/providers/crypto.ts`、`src/providers/transport.ts`、`src/db.ts` |
 | 認証とセッション、8〜9章153〜191頁 | パスキーでログインした持ち主の明示の許可、PKCE、短期アクセストークン、更新トークンの再使用検出と失効を使う | OAuth試験群 |
 | 認可、10章193〜210頁 | 送信者は認証から決める。他人の会話・権限・接続を変更できない。取り消しを通知直前にも再確認する | relay・events・配送の競合試験 |
 | ペイロードとインジェクション、11〜12章211〜258頁 | 未知フィールドと過大入力を拒否し、SQLやシェルの構文に入力を連結しない | スキーマ、SQL、管理CLI |
 | 依存関係と設定、13章259〜274頁 | lockfile、脆弱性確認、非rootの本番イメージ、秘密値を含まないエラーを維持する | CI、Docker、設定試験 |
-| SSRF・リダイレクト、14章275〜284頁 | 許可したHTTPSホストだけへ送信。全DNS回答を検査し、検査済みIPへ固定。リダイレクトを追わない。OAuthの戻り先は形（https・loopback・Cursorのスキーム）を検査し、登録と認可で完全一致を求める | transport、OAuthの戻り先試験 |
+| SSRF・リダイレクト、14章275〜284頁 | 許可したHTTPSホストだけへ送信。全DNS回答を検査し、検査済みIPへ固定。リダイレクトを追わない。Grok は `/automations/webhook/` 接頭辞。dots は `DOTS_WEBHOOK_PATH_PREFIX` を設定したとき同じ形でパスを制限する（未設定はホスト許可のみ。ChatGPT の実パスは資料に残していないので推測しない）。OAuthの戻り先は形（https・loopback・Cursorのスキーム）を検査し、登録と認可で完全一致を求める | transport、OAuthの戻り先試験、dots パス接頭辞試験 |
 | 事故対応、15章285〜291頁 | 配送停止（`NOTIFICATIONS_ENABLED`の無効化）、接続失効、漏れた鍵の交換、原因の再現テストを順に行い、外部AI側の処理も確認する | 運用手順と実接続試験 |
 
 ## 今回の変更
@@ -117,7 +117,7 @@ python3 -B -m unittest discover -s .agents/skills/web-security-review/scripts -p
 
 認証・認可・外部通信の否定試験と並列試験を、実PostgreSQLと模擬通知先で実行します。模擬通知先の成功、Render上の稼働、実際のdotsとGrokの会話成功は別々に記録します。判定が未検証の項目を合格として埋めません。
 
-DBの実行用資格情報とスキーマ管理用資格情報は、現時点では分離していません。DB接続・ロック・クエリの待ち時間上限と、DNS・ソケットを制御した通信部品の追加試験も残っています。バックアップからの復旧、データ保存期限、秘密値を含めない運用監視、実プロバイダー側の予算設定も公開利用を広げる前の確認対象です。固定台数と通知上限は、Render全体や受信AIの請求総額を保証するものではありません。
+DBの実行用資格情報とスキーマ管理用資格情報は、プロセスが強制してはいません。分離は推奨のままです（手順は[Renderの公開構成](render-deployment.md#migrator-と-runtime-の-db-ロール)）。接続については、`NODE_ENV=production` かつホストが loopback でない `DATABASE_URL` で `sslmode` が `require` / `verify-ca` / `verify-full` のいずれでもないとき、ホスト種別だけを警告する。既定は起動を続ける（Render の内部 URL は sslmode なしが普通）。`DATABASE_REQUIRE_TLS=true` のときだけ起動しない。Pool は `statement_timeout` を 30 秒にします。DNS・ソケットを制御した通信部品の追加試験、バックアップからの復旧、データ保存期限、秘密値を含めない運用監視、実プロバイダー側の予算設定も公開利用を広げる前の確認対象です。固定台数と通知上限は、Render全体や受信AIの請求総額を保証するものではありません。
 
 事故時は[Renderの停止手順](render-deployment.md)に従います。証拠を消す前に、日時、対象接続、操作結果、配送試行IDを記録します。本文・Cookie・Bearer・Webhookキーは記録しません。盗まれた資格情報は失効し、復旧後は同じ入力で回帰試験を行います。
 
@@ -234,3 +234,19 @@ Muse対応では、変更前にMuseの登録が`invalid_input`で拒否される
 ### 残るリスク
 
 `inbox_claim` の本文を `conversation_read` せずに別の `ask=auto` Linkへ送ること、および read から10分経過後の別相手への送信は、自動で届く。未リンクの第三者へは届かない。本文のコピー検知はしない。止まるのは「他会話を読んでから別相手へ送る」経路であり、LLMがclaimの内容を記憶して送ることは止めない。
+
+## 低優先の堅牢化（2026-10-08）
+
+レビュー対象は `main` `703305821d7fc203c4c55759ea643ac01fd0a837`。実装は `f92b7838df2022646bc37b894f5c13b1295321db`（#49 の複数Link間本文転送。その下に #52 の MCP 認証失敗制限、#50 の所有者権限、#51 の OAuth 修正）の上に載せた。指摘は Low 6〜8（issue #46 / #47 / #48）。認証・認可の信頼境界は変えていません。本番 Render の環境値と Blueprint は変更しません（反映は運営の判断）。
+
+| 脅威 | 対策 | 再現試験 |
+| --- | --- | --- |
+| 本番の遠隔 DB が TLS なし、長いクエリが接続を占有（Low 6） | `NODE_ENV=production` かつホストが `localhost` / `127.0.0.1` / `::1` でない `DATABASE_URL` で、`sslmode` が `require`・`verify-ca`・`verify-full` のいずれでもないとき警告する（ホスト種別だけ。URL・資格情報は出さない）。既定は Pool を作って起動する。`DATABASE_REQUIRE_TLS=true` のときだけ拒否。接続は `statement_timeout=30000`（30秒）。migrator と runtime のロール分離はコードでは強制せず、運用手順として残す | `test/db.test.ts`：loopback は警告なし。Render 内部形（ドットなしホスト・sslmode なし）は production でも警告して通る。同 URL でフラグ on は拒否。`sslmode=require` は警告なし。実接続で `SHOW statement_timeout` が 30s |
+| 公開 HTTPS の HSTS がホストだけ、`/health` のヘッダーが薄い（Low 7） | HTTPS の `APP_ORIGIN` では `Strict-Transport-Security: max-age=31536000; includeSubDomains`。`preload` は付けない（公開プリロードリストへの登録は取り消しにくく、運営の明示が要る）。`/health` は JSON `{status:"ok"}` のまま `Cache-Control: no-store` と `X-Content-Type-Options: nosniff` を付ける。公開 HTTPS では HSTS も付ける | `test/web.test.ts`：`/app` の HSTS に `includeSubDomains`。`/health` の JSON 不変と nosniff / no-store。loopback の HTTP 試験は HSTS なしのまま |
+| 許可ホスト上の任意パスへ dots の確認 POST が行きうる（Low 8） | Grok と同じくパス接頭辞＋残り＋クエリなし。接頭辞は `DOTS_WEBHOOK_PATH_PREFIX`（`/` で始まり `/` で終わるパス。`..` や `//` は拒否）。既定は未設定＝ホスト検査のみ。ChatGPT の実コールバックパスは[通知先の診断](callback-diagnostics.md)に残していないのでコードへ推測して埋め込まない。未設定のまま本番へ出すと、許可ホストの別パスへ確認 POST が残る | `test/providers.test.ts`：許可ホストでも接頭辞外・接頭辞そのもの・クエリ付きを拒否。`test/events.test.ts`：接頭辞外では HTTP しない。既存の dots 購読試験は接頭辞未設定のまま通る |
+
+### 検証の結果（2026-10-08）
+
+- 失敗テストを先に書いてから実装した。修正前は遠隔 production URL が sslmode なしで Pool 設定を返し、HSTS は `max-age=31536000` のみ、`/health` に nosniff / no-store が無く、許可ホストの別パスが `validateWebhookUrl` を通った。その後、Render 内部 URL（ドットなしホスト・sslmode なし）を既定で拒否すると既存本番の起動を止めうるため、拒否は `DATABASE_REQUIRE_TLS=true` に限った
+- **残るリスク**：既定では本番の非 loopback で sslmode なしでも起動する（警告のみ）。migrator と runtime の DB ロールは未分離。`sslmode=require` は証明書のホスト名まで検証しない（`verify-full` は運営が URL に書く）。`DOTS_WEBHOOK_PATH_PREFIX` 未設定では dots はホスト許可のみ。実 ChatGPT パスは未確認のため、設定前に本番へ出してもパス制限は効かない
+- **未検証**：Render 本番の実 `DATABASE_URL` のホスト形と sslmode の有無（値は見ない）、本番 `/health` の新ヘッダー、実 dots コールバックパスとの一致、HSTS preload リストへの登録

@@ -29,7 +29,12 @@ export class WebhookHostNotAllowed extends Error {
   constructor(public readonly hostname: string) { super('webhook_destination_rejected'); }
 }
 
-export function validateWebhookUrl(value: string, allowedHosts: readonly string[]): URL {
+/** Grok-style prefix: starts with the prefix, has a remainder, and has no query. */
+export function webhookPathMatchesPrefix(url: URL, pathPrefix: string): boolean {
+  return url.pathname.startsWith(pathPrefix) && url.pathname.length > pathPrefix.length && url.search === '';
+}
+
+export function validateWebhookUrl(value: string, allowedHosts: readonly string[], pathPrefix?: string): URL {
   const url = new URL(value);
   if (url.protocol !== 'https:' || url.username || url.password || url.hash ||
       (url.port && url.port !== '443') ||
@@ -37,6 +42,7 @@ export function validateWebhookUrl(value: string, allowedHosts: readonly string[
     throw new Error('webhook_destination_rejected');
   }
   if (!allowedHosts.includes(url.hostname)) throw new WebhookHostNotAllowed(url.hostname);
+  if (pathPrefix && !webhookPathMatchesPrefix(url, pathPrefix)) throw new Error('webhook_destination_rejected');
   return url;
 }
 

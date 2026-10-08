@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import { decryptSecret, webhookHeaders } from './crypto.js';
-import { validateWebhookUrl, type WebhookTransport } from './transport.js';
+import { validateWebhookUrl, webhookPathMatchesPrefix, type WebhookTransport } from './transport.js';
 import type { Provider } from '../relay.js';
 
 export interface Notification {
@@ -15,6 +15,7 @@ export interface ProviderOptions {
   transport: WebhookTransport; encryptionKey: Buffer;
   webhookHosts?: string[]; grokExperimental?: boolean;
   oauthResource?: string;
+  dotsWebhookPathPrefix?: string;
 }
 interface SubscriptionRow {
   id: string; event_name: string; callback_url: string; secret_encrypted: string;
@@ -68,6 +69,12 @@ export class ProviderDispatcher implements NotificationDispatcher {
         ))`, [notification.bindingId]);
     if (!rows.rowCount) return { status: 'configuration_required' };
     for (const subscription of rows.rows) {
+      if (this.options.dotsWebhookPathPrefix) {
+        try {
+          const callback = new URL(subscription.callback_url);
+          if (!webhookPathMatchesPrefix(callback, this.options.dotsWebhookPathPrefix)) return { status: 'configuration_required' };
+        } catch { return { status: 'configuration_required' }; }
+      }
       const body = JSON.stringify({ eventId: notification.id, name: subscription.event_name,
         timestamp: notification.occurredAt, data: { conversationId: notification.conversationId, messageId: notification.messageId }, cursor: null });
       const secrets = [decryptSecret(subscription.secret_encrypted, this.options.encryptionKey, subscription.id)];

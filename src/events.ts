@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { lockRelay, withTransaction } from './db.js';
 import { decryptSecret, encryptSecret, signingKey, webhookHeaders } from './providers/crypto.js';
-import { WebhookHostNotAllowed, type WebhookTransport } from './providers/transport.js';
+import { WebhookHostNotAllowed, webhookPathMatchesPrefix, type WebhookTransport } from './providers/transport.js';
 import { reserveVerification } from './verification-budget.js';
 
 export const MCP_EVENTS_VERSION = '2026-07-28';
@@ -33,7 +33,10 @@ export function subscriptionId(bindingId: string, name: string, url: string, arg
   return `sub_${createHash('sha256').update(canonicalJson([bindingId, url, name, args])).digest('hex')}`;
 }
 
-export interface EventOptions { transport: WebhookTransport; encryptionKey: Buffer; defaultTtlMs?: number }
+export interface EventOptions {
+  transport: WebhookTransport; encryptionKey: Buffer; defaultTtlMs?: number;
+  dotsWebhookPathPrefix?: string;
+}
 export type EventAuthorization = (client: PoolClient) => Promise<{ oauthFamilyId?: string }>;
 
 export class EventSubscriptions {
@@ -53,6 +56,7 @@ export class EventSubscriptions {
     if (!parsed.success) throw new EventError(-32602, 'invalid_subscription');
     const params = parsed.data;
     try { signingKey(params.delivery.secret); } catch { throw new EventError(-32602, 'invalid_signing_secret'); }
+    assertDotsCallbackPath(params.delivery.url, this.options.dotsWebhookPathPrefix);
     const id = subscriptionId(bindingId, params.name, params.delivery.url, params.arguments);
     const cacheKey = createHash('sha256').update(canonicalJson([bindingId, params.delivery.url, params.delivery.secret])).digest('hex');
     const needsVerification = await withTransaction(this.pool, async client => {
@@ -141,4 +145,11 @@ export class EventSubscriptions {
       return {};
     });
   }
+}
+
+function assertDotsCallbackPath(value: string, prefix: string | undefined): void {
+  if (!prefix) return;
+  let url: URL;
+  try { url = new URL(value); } catch { throw new EventError(-32015, 'challenge_failed'); }
+  if (!webhookPathMatchesPrefix(url, prefix)) throw new EventError(-32015, 'challenge_failed');
 }

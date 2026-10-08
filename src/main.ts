@@ -1,5 +1,5 @@
-import pg from 'pg';
 import { buildApp } from './app.js';
+import { createPool } from './db.js';
 import { Relay } from './relay.js';
 import { EventSubscriptions } from './events.js';
 import { notificationOptions } from './config.js';
@@ -19,7 +19,7 @@ const allowedHosts = process.env.ALLOWED_HOSTS?.split(',').map((value) => value.
 if (host !== '127.0.0.1' && host !== '::1' && !allowedHosts?.length) {
   throw new Error('ALLOWED_HOSTS is required when listening on a public interface');
 }
-const pool = new pg.Pool({ connectionString: databaseUrl });
+const pool = createPool(databaseUrl);
 const notifications = process.env.NOTIFICATIONS_ENABLED === 'true' ? notificationOptions() : undefined;
 const oauth = oauthFromEnvironment(pool);
 const origin = appOrigin();
