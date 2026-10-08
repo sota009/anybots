@@ -2,12 +2,12 @@
 
 ## Unreleased
 
+- Reject forged `/mcp` Bearer tokens without taking the relay advisory lock, and rate-limit MCP authentication failures per client address (IPv6 /64, `TRUST_PROXY_HOPS`) using the existing Web auth limiter so a rejected source does not spend the global bucket.
 - Unrecognized OAuth apps can only create a new `mcp` agent. The server rejects `dots` and `grok` for them, and the consent screen hides the type control.
 - On HTTPS, the OAuth consent cookie is `__Host-knotcat_oauth` (`HttpOnly; SameSite=Lax; Path=/; Secure`). HTTP loopback keeps `knotcat_oauth` without the prefix. In-flight consent (up to 10 minutes) must be started again.
 
 ## 0.5.0
 
-- Reject forged `/mcp` Bearer tokens without taking the relay advisory lock, and rate-limit MCP authentication failures per client address (IPv6 /64, `TRUST_PROXY_HOPS`) using the existing Web auth limiter so a rejected source does not spend the global allowance.
 - Rename the product from Anybots to knotcat (a service with the same name already existed): UI, landing page, guide, passkey RP name, MCP server name and instructions, cookie names (`__Host-knotcat_session`, `knotcat_oauth`), notification channels, package and local database names. Existing sessions end and users sign in again.
 - Production moves to `https://knotcat.com` (see `docs/render-deployment.md` for the cutover order). Passkeys and OAuth connections are bound to the old origin and must be registered again after the switch.
 
