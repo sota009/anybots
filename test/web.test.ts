@@ -150,7 +150,7 @@ it('connects an app by URL: authorize opens the web app, the signed-in owner app
   expect((await post('/api/v1/oauth/request', { request }, { cookie: both })).json()).toMatchObject({ app: 'Claude', trust: 'known', host: 'claude.ai' });
   const approved = await post('/api/v1/oauth/approve', { request, provider: 'mcp', displayName: 'Claude' }, { cookie: both });
   expect(approved.statusCode).toBe(200);
-  expect(String(approved.headers['set-cookie'])).toContain('knotcat_oauth=; HttpOnly; SameSite=Lax; Path=/api/v1/oauth; Max-Age=0');
+  expect(String(approved.headers['set-cookie'])).toContain('__Host-knotcat_oauth=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0; Secure');
   const callback = new URL(approved.json().redirect);
   expect(callback.searchParams.get('state')).toBe('claude-state');
   const tokens = (await app.inject({ method: 'POST', url: '/oauth/token', headers: { host }, payload: { grant_type: 'authorization_code', client_id: clientId,
@@ -163,6 +163,40 @@ it('connects an app by URL: authorize opens the web app, the signed-in owner app
   const me = (await app.inject({ url: '/api/v1/me', headers: { host, cookie } })).json();
   expect(me.mcpUrl).toBe(`${origin}/mcp`);
   expect(me.agents).toMatchObject([{ displayName: 'Claude', provider: 'mcp', connected: true }]);
+});
+
+it('refuses dots and grok when an unrecognized OAuth app creates an agent', async () => {
+  const redirect = 'https://evil.example.test/callback';
+  const registered = await app.inject({ method: 'POST', url: '/oauth/register', headers: { host }, payload: { redirect_uris: [redirect], client_name: 'Phish' } });
+  const verifier = randomBytes(32).toString('base64url');
+  const query = new URLSearchParams({
+    response_type: 'code', client_id: registered.json().client_id, redirect_uri: redirect, resource: `${origin}/mcp`, scope: 'relay',
+    state: 'phish-state', code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
+  });
+  const authorize = await app.inject({ url: `/oauth/authorize?${query}`, headers: { host } });
+  const request = String(authorize.headers.location).split('#connect=')[1]!;
+  const oauthCookie = String(authorize.headers['set-cookie']).split(';')[0]!;
+  const { cookie } = await signup('Cam', '198.51.100.10');
+  const both = `${cookie}; ${oauthCookie}`;
+  expect((await post('/api/v1/oauth/request', { request }, { cookie: both })).json()).toMatchObject({
+    app: 'Unrecognized app', trust: 'unknown', host: 'evil.example.test', suggested: { provider: 'mcp' }, agents: [],
+  });
+  for (const provider of ['dots', 'grok']) {
+    const denied = await post('/api/v1/oauth/approve', { request, provider, displayName: 'Not really ChatGPT' }, { cookie: both });
+    expect([denied.statusCode, denied.json()]).toEqual([403, { error: 'forbidden' }]);
+  }
+  expect((await db.pool.query("SELECT count(*)::int AS n FROM bindings WHERE provider<>'mcp'")).rows[0].n).toBe(0);
+  const approved = await post('/api/v1/oauth/approve', { request, provider: 'mcp', displayName: 'MCP agent' }, { cookie: both });
+  expect(approved.statusCode).toBe(200);
+  expect((await app.inject({ url: '/api/v1/me', headers: { host, cookie } })).json().agents).toMatchObject([{ displayName: 'MCP agent', provider: 'mcp' }]);
+});
+
+it('does not offer dots or grok types on the consent screen for unrecognized apps', async () => {
+  const script = await app.inject({ url: '/app/app.js', headers: { host } });
+  expect(script.body).toContain("info.trust === 'unknown'");
+  expect(script.body).toContain("unrecognized ? 'mcp' : provider.value");
+  expect(script.body).toContain("id: 'connect-provider'");
+  expect(script.body).toMatch(/unrecognized \? null : el\('select', \{ id: 'connect-provider'/);
 });
 
 it('creates contact invites as fragment URLs and accepts them for a signed-in person', async () => {

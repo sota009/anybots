@@ -105,7 +105,7 @@ describe('OAuth: paste the URL, sign in, and approve', () => {
     expect(flow.response.headers.location).toBe(`${issuer}/app#connect=${flow.request}`);
     expect(flow.response.headers['cache-control']).toBe('no-store');
     expect(flow.response.headers['referrer-policy']).toBe('no-referrer');
-    expect(String(flow.response.headers['set-cookie'])).toMatch(/^knotcat_oauth=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Lax; Path=\/api\/v1\/oauth; Max-Age=600; Secure$/);
+    expect(String(flow.response.headers['set-cookie'])).toMatch(/^__Host-knotcat_oauth=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Lax; Path=\/; Max-Age=600; Secure$/);
     const saved = JSON.stringify((await db.pool.query('SELECT * FROM oauth_pending')).rows);
     expect(saved).not.toContain(flow.request);
     expect(saved).not.toContain(flow.cookie);
@@ -150,6 +150,54 @@ describe('OAuth: paste the URL, sign in, and approve', () => {
     const agent = (await db.pool.query('SELECT owner_id,provider,display_name,active FROM bindings WHERE id=$1', [extra!.bindingId])).rows[0];
     expect(agent).toEqual({ owner_id: ada, provider: 'dots', display_name: 'My ChatGPT', active: true });
     expect((await db.pool.query('SELECT count(*)::int AS n FROM grants')).rows[0].n).toBe(0);
+  });
+
+  it('lets an unrecognized app create only an MCP agent, not dots or grok', async () => {
+    const stranger = await begin(unknown);
+    for (const provider of ['dots', 'grok'] as const) {
+      await expect(approve(stranger, { provider, displayName: 'Not really ChatGPT' })).rejects.toMatchObject({ code: 'forbidden' });
+    }
+    expect((await db.pool.query("SELECT count(*)::int AS n FROM bindings WHERE owner_id=$1 AND provider<>'mcp'", [ada])).rows[0].n).toBe(0);
+    const created = new URL((await approve(stranger, { provider: 'mcp', displayName: 'Stranger' })).redirect);
+    const tokens = (await exchange(stranger, created.searchParams.get('code')!, stranger.verifier)).json();
+    const { extra } = await oauth.verifyAccessToken(tokens.access_token);
+    expect((await db.pool.query('SELECT provider FROM bindings WHERE id=$1', [extra!.bindingId])).rows[0].provider).toBe('mcp');
+    const forwarded = await begin('https://claude.ai/redirect?to=https%3A%2F%2Fattacker.example');
+    await expect(approve(forwarded, { provider: 'dots', displayName: 'Claude' })).rejects.toMatchObject({ code: 'forbidden' });
+  });
+
+  it('pins consent cookie attributes: __Host- on HTTPS, host-only on HTTP localhost', async () => {
+    const httpsHeader = String((await begin()).response.headers['set-cookie']);
+    expect(oauth.cookieName).toBe('__Host-knotcat_oauth');
+    expect(httpsHeader.startsWith('__Host-knotcat_oauth=')).toBe(true);
+    expect(httpsHeader).toContain('; HttpOnly');
+    expect(httpsHeader).toContain('; Secure');
+    expect(httpsHeader).toContain('; SameSite=Lax');
+    expect(httpsHeader).toMatch(/; Path=\//);
+    expect(httpsHeader).not.toContain('Path=/api');
+    expect(httpsHeader).not.toMatch(/;\s*Domain=/i);
+    expect(httpsHeader).toMatch(/^__Host-knotcat_oauth=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Lax; Path=\/; Max-Age=600; Secure$/);
+    const local = new OAuthPilot(db.pool, { issuer: 'http://127.0.0.1:3000', allowInsecureLocalhost: true });
+    const localApp = Fastify();
+    local.register(localApp);
+    await localApp.ready();
+    try {
+      const clientId = (await localApp.inject({ method: 'POST', url: '/oauth/register', payload: { redirect_uris: [chatgpt], client_name: 'Local', token_endpoint_auth_method: 'none' } })).json().client_id;
+      const verifier = randomBytes(32).toString('base64url');
+      const query = new URLSearchParams({
+        response_type: 'code', client_id: clientId, redirect_uri: chatgpt, resource: local.resource, scope: 'relay',
+        state: 'local-state', code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
+      });
+      const header = String((await localApp.inject({ method: 'GET', url: `/oauth/authorize?${query}` })).headers['set-cookie']);
+      expect(local.cookieName).toBe('knotcat_oauth');
+      expect(header.startsWith('knotcat_oauth=')).toBe(true);
+      expect(header).toContain('; HttpOnly');
+      expect(header).toContain('; SameSite=Lax');
+      expect(header).toMatch(/; Path=\//);
+      expect(header).not.toContain('Path=/api');
+      expect(header).not.toMatch(/Secure|__Host-|;\s*Domain=/i);
+      expect(header).toMatch(/^knotcat_oauth=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Lax; Path=\/; Max-Age=600$/);
+    } finally { await localApp.close(); }
   });
 
   it('reconnects an existing agent only for recognized or on-device apps and only for its owner', async () => {

@@ -31,20 +31,26 @@ this exception in production.
    with dynamic client registration (public client, PKCE `S256`).
 2. `GET /oauth/authorize` validates the client, the exact registered redirect,
    resource, scope, state, and PKCE challenge. It stores a pending request for
-   ten minutes, sets an HttpOnly cookie bound to it (`Path=/api/v1/oauth`), and
-   redirects to `/app#connect=<request token>`.
+   ten minutes, sets an HttpOnly cookie bound to it, and redirects to
+   `/app#connect=<request token>`. On HTTPS the cookie is `__Host-knotcat_oauth`
+   (`Secure; SameSite=Lax; Path=/`; no `Domain`). HTTP loopback uses
+   `knotcat_oauth` with the same attributes except `Secure` and the prefix,
+   because `__Host-` requires a secure origin.
 3. The web app asks the owner to sign in with a passkey if needed (new people
    still need an invite). It then shows the consent screen: the app name, whether
    the app is recognized, the exact host that receives the authorization, and the
    permission.
-4. The owner names a new agent (the app name is the default) and keeps or changes
-   its type (`dots` for `chatgpt.com` callbacks, otherwise `mcp`; `grok` for a
-   Grok Bot running as a Cursor Automation). For a recognized app the owner may
-   instead choose an existing agent to reconnect. The owner then selects
-   **Connect**. `POST /api/v1/oauth/approve` needs the session, the exact
-   `Origin`, the request token, and the matching cookie. It consumes the request,
-   creates the agent if needed, and returns the callback with a two-minute,
-   single-use code, `state`, and `iss`. The browser navigates there.
+4. The owner names a new agent (the app name is the default) and, for a
+   recognized or on-device app, keeps or changes its type (`dots` for
+   `chatgpt.com` callbacks, otherwise `mcp`; `grok` for a Grok Bot running as a
+   Cursor Automation). For a recognized app the owner may instead choose an
+   existing agent to reconnect. An unrecognized app can only create a new `mcp`
+   agent; the type control is hidden and the server rejects `dots` and `grok`.
+   The owner then selects **Connect**. `POST /api/v1/oauth/approve` needs the
+   session, the exact `Origin`, the request token, and the matching cookie. It
+   consumes the request, creates the agent if needed, and returns the callback
+   with a two-minute, single-use code, `state`, and `iss`. The browser navigates
+   there.
 5. The app exchanges the code with the PKCE verifier for a fifteen-minute access
    token and a rotating refresh token.
 
@@ -71,9 +77,10 @@ Poke (`poke.com`), Cursor (`cursor.com`, `cursor://`), Perplexity
 (`perplexity.ai`), and VS Code (`vscode.dev`). Loopback callbacks are shown as
 "An app on this device". A callback with a query string is not trusted as its
 host's app, because the query could feed an open redirect on that site. Any other
-callback is shown as an **unrecognized app**, with its host. An unrecognized app can only create a new agent. It cannot take over an
-existing agent that already has links. The `client_name` sent at registration is
-shown only as an unverified label.
+callback is shown as an **unrecognized app**, with its host. An unrecognized app
+can only create a new `mcp` agent. It cannot take over an existing agent, and it
+cannot create `dots` or `grok` agents that would accept outbound webhooks. The
+`client_name` sent at registration is shown only as an unverified label.
 
 ## Contract and limits
 
