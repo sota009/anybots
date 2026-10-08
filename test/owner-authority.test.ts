@@ -30,7 +30,7 @@ beforeAll(async () => {
 afterAll(async () => { await app?.close(); await db?.close(); });
 beforeEach(async () => { await db.pool.query('TRUNCATE owners, invites, web_rates CASCADE'); });
 
-const json = (method: string, url: string, payload: unknown, headers: Record<string, string>) =>
+const json = (method: 'POST' | 'DELETE', url: string, payload: unknown, headers: Record<string, string>) =>
   app.inject({ method, url, payload: JSON.stringify(payload ?? {}), headers: { host, origin, 'content-type': 'application/json', ...headers } });
 
 async function signup(name: string, ip: string) {
